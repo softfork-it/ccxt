@@ -4,7 +4,7 @@
 import Exchange from './abstract/fibe.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { Precise } from './base/Precise.js';
-import type { Dict, Market, OrderBook, Int, int } from './base/types.js';
+import type { Dict, Market, OHLCV, OrderBook, Trade, Int, int } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -34,8 +34,8 @@ export default class fibe extends Exchange {
                 'fetchTicker': false,
                 'fetchTickers': false,
                 'fetchOrderBook': true,
-                'fetchTrades': false,
-                'fetchOHLCV': false,
+                'fetchTrades': true,
+                'fetchOHLCV': true,
                 'fetchBalance': false,
                 'fetchOpenOrders': false,
                 'fetchOrders': false,
@@ -266,6 +266,133 @@ export default class fibe extends Exchange {
             orderbook['asks'] = this.arraySlice (orderbook['asks'], 0, limit);
         }
         return orderbook;
+    }
+
+    async fetchTrades (symbol: string, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
+        /**
+         * @method
+         * @name fibe#fetchTrades
+         * @description get the list of most recent trades for a particular symbol
+         * @see https://fb-4b8448ac.alephium.org/api/v1/recent-market-trades
+         * @param {string} symbol unified symbol of the market to fetch trades for
+         * @param {int} [since] timestamp in ms of the earliest trade to fetch
+         * @param {int} [limit] the maximum amount of trades to fetch
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {Trade[]} a list of [trade structures]{@link https://docs.ccxt.com/#/?id=public-trades}
+         */
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const info = market['info'];
+        const request: Dict = {
+            'marketIndex': this.safeString (info, 'marketIndex'),
+            'marketType': market['spot'] ? 'S' : 'P',
+        };
+        const response = await this.publicGetRecentMarketTrades (this.extend (request, params));
+        return this.parseTrades (response, market, since, limit);
+    }
+
+    parseTrade (trade: Dict, market: Market = undefined): Trade {
+        //
+        //     {
+        //         "marketIndex": "1",
+        //         "marketType": "S",
+        //         "px": "1789.6",
+        //         "side": "A",
+        //         "sz": "0.00001",
+        //         "oid": "284572983127444820",
+        //         "time": 1781672971,
+        //         "txId": "3QNbQR27r5fgxbFLAX4nMuvMvV6KRHQcPHYFrzoh3RdKzUcBejatrJBfpf1FYyQzGcVhee1DqgEaGzCngMxXaoRq"
+        //     }
+        //
+        const timestamp = this.safeTimestamp (trade, 'time');
+        const sideRaw = this.safeString (trade, 'side');
+        let side = undefined;
+        if (sideRaw === 'B') {
+            side = 'buy';
+        } else if (sideRaw === 'A') {
+            side = 'sell';
+        }
+        return this.safeTrade ({
+            'info': trade,
+            'id': undefined,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'symbol': this.safeSymbol (undefined, market),
+            'order': this.safeString (trade, 'oid'),
+            'type': undefined,
+            'side': side,
+            'takerOrMaker': undefined,
+            'price': this.safeString (trade, 'px'),
+            'amount': this.safeString (trade, 'sz'),
+            'cost': undefined,
+            'fee': undefined,
+        }, market);
+    }
+
+    async fetchOHLCV (symbol: string, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params = {}): Promise<OHLCV[]> {
+        /**
+         * @method
+         * @name fibe#fetchOHLCV
+         * @description fetches historical candlestick data containing the open, high, low, and close price, and the volume of a market
+         * @see https://fb-4b8448ac.alephium.org/api/v1/candles
+         * @param {string} symbol unified symbol of the market to fetch OHLCV data for
+         * @param {string} timeframe the length of time each candle represents
+         * @param {int} [since] timestamp in ms of the earliest candle to fetch
+         * @param {int} [limit] the maximum amount of candles to fetch
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {int} [params.until] timestamp in ms of the latest candle to fetch
+         * @returns {int[][]} A list of candles ordered as timestamp, open, high, low, close, volume
+         */
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const info = market['info'];
+        const duration = this.parseTimeframe (timeframe);
+        const requestLimit = (limit === undefined) ? 100 : limit;
+        let until: Int = undefined;
+        [ until, params ] = this.handleOptionAndParams (params, 'fetchOHLCV', 'until');
+        let endTimestamp = (until === undefined) ? this.seconds () : this.parseToInt (until / 1000);
+        let startTimestamp = endTimestamp - (requestLimit * duration);
+        if (since !== undefined) {
+            startTimestamp = this.parseToInt (since / 1000);
+            if (until === undefined) {
+                endTimestamp = Math.min (startTimestamp + (requestLimit * duration), this.seconds ());
+            }
+        }
+        const request: Dict = {
+            'marketIndex': this.safeString (info, 'marketIndex'),
+            'marketType': market['spot'] ? 'S' : 'P',
+            'startTimestamp': startTimestamp,
+            'endTimestamp': endTimestamp,
+            'interval': this.safeString (this.timeframes, timeframe, timeframe),
+        };
+        const response = await this.publicGetCandles (this.extend (request, params));
+        return this.parseOHLCVs (response, market, timeframe, since, limit);
+    }
+
+    parseOHLCV (ohlcv, market: Market = undefined): OHLCV {
+        //
+        //     {
+        //         "marketIndex": "1",
+        //         "marketType": "S",
+        //         "t": 1781670900,
+        //         "T": 1781670959,
+        //         "o": "1793.6",
+        //         "c": "1790.7",
+        //         "l": "1790.7",
+        //         "h": "1793.6",
+        //         "bv": "0.21866999999999998",
+        //         "qv": "392.00005",
+        //         "n": 9
+        //     }
+        //
+        return [
+            this.safeTimestamp (ohlcv, 't'),
+            this.safeNumber (ohlcv, 'o'),
+            this.safeNumber (ohlcv, 'h'),
+            this.safeNumber (ohlcv, 'l'),
+            this.safeNumber (ohlcv, 'c'),
+            this.safeNumber (ohlcv, 'bv'),
+        ];
     }
 
     sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {

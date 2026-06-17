@@ -1,5 +1,5 @@
 import Exchange from './abstract/fibe.js';
-import type { Dict, Market, OrderBook, Int, int } from './base/types.js';
+import type { Dict, Market, OHLCV, OrderBook, Trade, Int, int } from './base/types.js';
 /**
  * @class fibe
  * @augments Exchange
@@ -10,6 +10,10 @@ export default class fibe extends Exchange {
     fetchMarkets(params?: {}): Promise<Market[]>;
     parseMarket(market: Dict): Market;
     fetchOrderBook(symbol: string, limit?: Int, params?: {}): Promise<OrderBook>;
+    fetchTrades(symbol: string, since?: Int, limit?: Int, params?: {}): Promise<Trade[]>;
+    parseTrade(trade: Dict, market?: Market): Trade;
+    fetchOHLCV(symbol: string, timeframe?: string, since?: Int, limit?: Int, params?: {}): Promise<OHLCV[]>;
+    parseOHLCV(ohlcv: any, market?: Market): OHLCV;
     sign(path: any, api?: string, method?: string, params?: {}, headers?: any, body?: any): {
         url: string;
         method: string;
