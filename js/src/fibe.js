@@ -46,9 +46,20 @@ export default class fibe extends Exchange {
             },
             'features': {},
             'timeframes': {
-                '1m': '1m', '3m': '3m', '5m': '5m', '15m': '15m', '30m': '30m',
-                '1h': '1h', '2h': '2h', '4h': '4h', '8h': '8h', '12h': '12h',
-                '1d': '1d', '3d': '3d', '1w': '1w', '1M': '1M',
+                '1m': '1m',
+                '3m': '3m',
+                '5m': '5m',
+                '15m': '15m',
+                '30m': '30m',
+                '1h': '1h',
+                '2h': '2h',
+                '4h': '4h',
+                '8h': '8h',
+                '12h': '12h',
+                '1d': '1d',
+                '3d': '3d',
+                '1w': '1w',
+                '1M': '1M',
             },
             'urls': {
                 'logo': '',
@@ -131,9 +142,13 @@ export default class fibe extends Exchange {
         return this.parseMarkets(spotMarkets);
     }
     parseMarket(market) {
-        // symbol e.g. "SOL/USDC"
+        // spot symbols are "BASE/USDC", perp symbols are "BASE-USDC"
         const marketSymbol = this.safeString(market, 'symbol');
-        const parts = marketSymbol.split('/');
+        let separator = '/';
+        if (marketSymbol.indexOf('/') < 0) {
+            separator = '-';
+        }
+        const parts = marketSymbol.split(separator);
         const baseId = this.safeString(market, 'baseMint');
         const quoteId = this.safeString(market, 'quoteMint');
         const base = this.safeCurrencyCode(this.safeString(parts, 0));
@@ -209,7 +224,7 @@ export default class fibe extends Exchange {
          * @description fetches L2 order book for a market
          * @see https://fb-4b8448ac.alephium.org/api/v1/l2book
          * @param {string} symbol unified market symbol
-         * @param {int} [limit] not used by fibe, the full aggregated book is returned
+         * @param {int} [limit] the maximum number of order book levels to return per side (applied client-side)
          * @param {object} [params] extra parameters specific to the exchange API endpoint
          * @param {string} [params.priceStep] price aggregation step (defaults to the market tick size)
          * @returns {object} an order book structure
@@ -239,12 +254,16 @@ export default class fibe extends Exchange {
         //         "asks": [ { "px": "123.50", "sz": "10.5" }, ... ]
         //     }
         //
-        // some deployments wrap the book in a single-element array
         let book = response;
         if (Array.isArray(response)) {
             book = this.safeDict(response, 0, {});
         }
-        return this.parseOrderBook(book, symbol, undefined, 'bids', 'asks', 'px', 'sz');
+        const orderbook = this.parseOrderBook(book, symbol, undefined, 'bids', 'asks', 'px', 'sz');
+        if (limit !== undefined) {
+            orderbook['bids'] = this.arraySlice(orderbook['bids'], 0, limit);
+            orderbook['asks'] = this.arraySlice(orderbook['asks'], 0, limit);
+        }
+        return orderbook;
     }
     sign(path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
         let url = this.urls['api']['rest'] + '/' + path;
