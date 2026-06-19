@@ -6,6 +6,7 @@
 
 //  ---------------------------------------------------------------------------
 import Exchange from './abstract/fibe.js';
+import { ArgumentsRequired } from './base/errors.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { Precise } from './base/Precise.js';
 //  ---------------------------------------------------------------------------
@@ -37,9 +38,9 @@ export default class fibe extends Exchange {
                 'fetchOrderBook': true,
                 'fetchTrades': true,
                 'fetchOHLCV': true,
-                'fetchBalance': false,
-                'fetchOpenOrders': false,
-                'fetchOrders': false,
+                'fetchBalance': true,
+                'fetchOpenOrders': true,
+                'fetchOrders': true,
                 'fetchTradingFees': false,
                 'createOrder': false,
                 'cancelOrder': false,
@@ -217,6 +218,42 @@ export default class fibe extends Exchange {
             'info': market,
         });
     }
+    async fetchBalance(params = {}) {
+        /**
+         * @method
+         * @name fibe#fetchBalance
+         * @description query spot balances for a user
+         * @see https://fb-4b8448ac.alephium.org/api/v1/spot-state
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @returns {object} a [balance structure]{@link https://docs.ccxt.com/#/?id=balance-structure}
+         */
+        let userAddress = undefined;
+        [userAddress, params] = this.handlePublicAddress('fetchBalance', params);
+        const request = {
+            'user': userAddress,
+        };
+        const response = await this.publicGetSpotState(this.extend(request, params));
+        //
+        //     {
+        //         "user": "11111111111111111111111111111111",
+        //         "balances": [
+        //             { "symbol": "USDC", "hold": "1.2", "entryNtl": "3.4" }
+        //         ]
+        //     }
+        //
+        const balances = this.safeList(response, 'balances', []);
+        const result = { 'info': response };
+        for (let i = 0; i < balances.length; i++) {
+            const balance = balances[i];
+            const currencyId = this.safeString(balance, 'symbol');
+            const code = this.safeCurrencyCode(currencyId);
+            const account = this.account();
+            account['used'] = this.safeString(balance, 'hold');
+            result[code] = account;
+        }
+        return this.safeBalance(result);
+    }
     async fetchOrderBook(symbol, limit = undefined, params = {}) {
         /**
          * @method
@@ -301,14 +338,7 @@ export default class fibe extends Exchange {
         //     }
         //
         const timestamp = this.safeTimestamp(trade, 'time');
-        const sideRaw = this.safeString(trade, 'side');
-        let side = undefined;
-        if (sideRaw === 'B') {
-            side = 'buy';
-        }
-        else if (sideRaw === 'A') {
-            side = 'sell';
-        }
+        const side = this.parseSide(this.safeString(trade, 'side'));
         return this.safeTrade({
             'info': trade,
             'id': undefined,
@@ -388,6 +418,187 @@ export default class fibe extends Exchange {
             this.safeNumber(ohlcv, 'c'),
             this.safeNumber(ohlcv, 'bv'),
         ];
+    }
+    async fetchOpenOrders(symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        /**
+         * @method
+         * @name fibe#fetchOpenOrders
+         * @description fetch all unfilled currently open orders
+         * @see https://fb-4b8448ac.alephium.org/api/v1/open-orders
+         * @param {string} symbol unified market symbol
+         * @param {int} [since] the earliest time in ms to fetch open orders for
+         * @param {int} [limit] the maximum number of open orders structures to retrieve
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
+         */
+        let userAddress = undefined;
+        [userAddress, params] = this.handlePublicAddress('fetchOpenOrders', params);
+        await this.loadMarkets();
+        let market = undefined;
+        if (symbol !== undefined) {
+            market = this.market(symbol);
+        }
+        const request = {
+            'user': userAddress,
+        };
+        const response = await this.publicGetOpenOrders(this.extend(request, params));
+        return this.parseOrders(response, market, since, limit);
+    }
+    async fetchOrders(symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        /**
+         * @method
+         * @name fibe#fetchOrders
+         * @description fetch historical orders
+         * @see https://fb-4b8448ac.alephium.org/api/v1/historical-orders
+         * @param {string} symbol unified market symbol
+         * @param {int} [since] the earliest time in ms to fetch orders for
+         * @param {int} [limit] the maximum number of order structures to retrieve
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {int} [params.page] page number, default is 1
+         * @param {int} [params.pageSize] page size, default is limit when provided
+         * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
+         */
+        let userAddress = undefined;
+        [userAddress, params] = this.handlePublicAddress('fetchOrders', params);
+        await this.loadMarkets();
+        let market = undefined;
+        if (symbol !== undefined) {
+            market = this.market(symbol);
+        }
+        let page = undefined;
+        [page, params] = this.handleOptionAndParams(params, 'fetchOrders', 'page');
+        let pageSize = undefined;
+        [pageSize, params] = this.handleOptionAndParams(params, 'fetchOrders', 'pageSize', limit);
+        const request = {
+            'user': userAddress,
+        };
+        if (page !== undefined) {
+            request['page'] = page;
+        }
+        if (pageSize !== undefined) {
+            request['pageSize'] = pageSize;
+        }
+        const response = await this.publicGetHistoricalOrders(this.extend(request, params));
+        return this.parseOrders(response, market, since, limit);
+    }
+    parseOrder(order, market = undefined) {
+        //
+        //     {
+        //         "marketIndex": "1",
+        //         "marketType": "S",
+        //         "oid": "1",
+        //         "type": "L",
+        //         "timeInForce": "PostOnly",
+        //         "px": "1",
+        //         "side": "B",
+        //         "origSz": "1",
+        //         "sz": "1",
+        //         "status": "O",
+        //         "txId": "3WF7T6Hmyrpdo1MMUghDnv1LaVwmKuEM1duJ3VaU5fCUhSfudqtu4JCP3kCTnjqDUqBb1hcTtk5cNF4BYkCQv2mH",
+        //         "createdAt": 1,
+        //         "updatedAt": 1
+        //     }
+        //
+        const marketIndex = this.safeString2(order, 'marketIndex', 'market');
+        const marketType = this.safeString(order, 'marketType');
+        let marketId = undefined;
+        if (marketIndex !== undefined) {
+            const idPrefix = (marketType === 'P') ? 'perp:' : 'spot:';
+            marketId = idPrefix + marketIndex;
+        }
+        market = this.safeMarket(marketId, market);
+        const timestamp = this.parseOrderTimestamp(order, 'createdAt');
+        const lastUpdateTimestamp = this.parseOrderTimestamp(order, 'updatedAt');
+        const amount = this.safeString(order, 'origSz');
+        const remaining = this.safeString(order, 'sz');
+        let filled = undefined;
+        if ((amount !== undefined) && (remaining !== undefined)) {
+            filled = Precise.stringSub(amount, remaining);
+        }
+        const timeInForce = this.parseOrderTimeInForce(this.safeString(order, 'timeInForce'));
+        let postOnly = undefined;
+        if (timeInForce === 'PO') {
+            postOnly = true;
+        }
+        return this.safeOrder({
+            'info': order,
+            'id': this.safeString(order, 'oid'),
+            'clientOrderId': undefined,
+            'timestamp': timestamp,
+            'datetime': this.iso8601(timestamp),
+            'lastTradeTimestamp': undefined,
+            'lastUpdateTimestamp': lastUpdateTimestamp,
+            'symbol': market['symbol'],
+            'type': this.parseOrderType(this.safeString(order, 'type')),
+            'timeInForce': timeInForce,
+            'postOnly': postOnly,
+            'reduceOnly': undefined,
+            'side': this.parseSide(this.safeString(order, 'side')),
+            'price': this.safeString(order, 'px'),
+            'triggerPrice': undefined,
+            'amount': amount,
+            'cost': undefined,
+            'average': undefined,
+            'filled': filled,
+            'remaining': remaining,
+            'status': this.parseOrderStatus(this.safeString(order, 'status')),
+            'fee': undefined,
+            'trades': undefined,
+        }, market);
+    }
+    parseOrderStatus(status) {
+        const statuses = {
+            'O': 'open',
+            'F': 'closed',
+            'C': 'canceled',
+        };
+        return this.safeString(statuses, status, status);
+    }
+    parseOrderType(type) {
+        const types = {
+            'L': 'limit',
+            'M': 'market',
+        };
+        return this.safeString(types, type, type);
+    }
+    parseOrderTimeInForce(timeInForce) {
+        const timeInForces = {
+            'Gtc': 'GTC',
+            'Ioc': 'IOC',
+            'Fok': 'FOK',
+            'PostOnly': 'PO',
+        };
+        return this.safeString(timeInForces, timeInForce, timeInForce);
+    }
+    parseSide(side) {
+        const sides = {
+            'B': 'buy',
+            'A': 'sell',
+        };
+        return this.safeString(sides, side, side);
+    }
+    parseOrderTimestamp(order, key) {
+        const timestamp = this.safeInteger(order, key);
+        if (timestamp === undefined) {
+            return undefined;
+        }
+        if (timestamp > 9999999999) {
+            return timestamp;
+        }
+        return timestamp * 1000;
+    }
+    handlePublicAddress(methodName, params) {
+        let user = undefined;
+        [user, params] = this.handleOptionAndParams2(params, methodName, 'user', 'address');
+        if ((user !== undefined) && (user !== '')) {
+            return [user, params];
+        }
+        if ((this.walletAddress !== undefined) && (this.walletAddress !== '')) {
+            return [this.walletAddress, params];
+        }
+        throw new ArgumentsRequired(this.id + ' ' + methodName + '() requires a user parameter inside \'params\' or the wallet address set');
     }
     sign(path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
         let url = this.urls['api']['rest'] + '/' + path;

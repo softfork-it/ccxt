@@ -61,6 +61,22 @@ async function main () {
     assert (ohlcv.length > 0, 'expected candles');
     assert (ohlcv.length <= 3, 'OHLCV limit failed');
     console.log ('\nohlcv:', ohlcv);
+
+    const user = process.env.FIBE_USER || '11111111111111111111111111111111';
+    const balance = await fibe.fetchBalance ({ user });
+    assert (balance['info']['user'] === user, 'balance user mismatch');
+    console.log ('\nbalance:');
+    console.dir (balance, { depth: null });
+
+    const openOrders = await fibe.fetchOpenOrders (undefined, undefined, 2, { user });
+    assert (Array.isArray (openOrders), 'expected open orders array');
+    assert (openOrders.length <= 2, 'open orders limit failed');
+    console.log ('\nopen orders:', openOrders);
+
+    const orders = await fibe.fetchOrders (undefined, undefined, 2, { user });
+    assert (Array.isArray (orders), 'expected historical orders array');
+    assert (orders.length <= 2, 'historical orders limit failed');
+    console.log ('\nhistorical orders:', orders);
 }
 
 main ().catch ((e) => { console.error (e); process.exit (1); });
