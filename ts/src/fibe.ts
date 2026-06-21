@@ -5,7 +5,7 @@ import Exchange from './abstract/fibe.js';
 import { ArgumentsRequired } from './base/errors.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { Precise } from './base/Precise.js';
-import type { Balances, Dict, Market, OHLCV, Order, OrderBook, Ticker, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
+import type { Balances, Dict, Market, OHLCV, Order, OrderBook, Strings, Ticker, Tickers, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -33,7 +33,7 @@ export default class fibe extends Exchange {
                 'fetchMarkets': true,
                 'fetchCurrencies': false,
                 'fetchTicker': true,
-                'fetchTickers': false,
+                'fetchTickers': true,
                 'fetchOrderBook': true,
                 'fetchTrades': true,
                 'fetchOHLCV': true,
@@ -330,6 +330,29 @@ export default class fibe extends Exchange {
         };
         const response = await this.publicGetSpotAssetCtx (this.extend (request, params));
         return this.parseTicker (response, market);
+    }
+
+    async fetchTickers (symbols: Strings = undefined, params = {}): Promise<Tickers> {
+        /**
+         * @method
+         * @name fibe#fetchTickers
+         * @description fetches price tickers for multiple spot markets
+         * @see https://fb-4b8448ac.alephium.org/api/v1/spot-asset-ctx
+         * @param {string[]|undefined} symbols unified symbols of the markets to fetch tickers for, all market tickers are returned if not assigned
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {object} a dictionary of [ticker structures]{@link https://docs.ccxt.com/#/?id=ticker-structure}
+         */
+        await this.loadMarkets ();
+        symbols = this.marketSymbols (symbols);
+        if (symbols === undefined) {
+            symbols = Object.keys (this.markets);
+        }
+        const result: Tickers = {};
+        for (let i = 0; i < symbols.length; i++) {
+            const symbol = symbols[i];
+            result[symbol] = await this.fetchTicker (symbol, params);
+        }
+        return result;
     }
 
     parseTicker (ticker: Dict, market: Market = undefined): Ticker {

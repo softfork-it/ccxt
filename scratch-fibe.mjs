@@ -6,6 +6,7 @@
 //     npm run tsBuild        # tsc -> js/   (re-run after each edit to ts/src/fibe.ts)
 //     node scratch-fibe.mjs
 //     node scratch-fibe.mjs fetchTicker
+//     node scratch-fibe.mjs fetchTickers
 //     node scratch-fibe.mjs fetchTradingFee
 //
 // If `js/ccxt.js` doesn't exist yet, run a full `npm run build` once.
@@ -17,6 +18,7 @@ const available = [
     'fetchMarkets',
     'market',
     'fetchTicker',
+    'fetchTickers',
     'fetchOrderBook',
     'fetchTrades',
     'fetchOHLCV',
@@ -78,6 +80,14 @@ async function main () {
         const ticker = await fibe.fetchTicker (sym);
         assert (ticker['symbol'] === sym, 'ticker symbol mismatch');
         print ('fetchTicker', ticker);
+    }
+
+    if (shouldRun ('fetchTickers')) {
+        const tickers = await fibe.fetchTickers ();
+        assert (tickers[sym] !== undefined, 'expected ticker for selected symbol');
+        assert (tickers[sym]['symbol'] === sym, 'tickers symbol mismatch');
+        assert (Object.keys (tickers).length === symbols.length, 'expected tickers for all markets');
+        print ('fetchTickers', tickers);
     }
 
     if (shouldRun ('fetchOrderBook')) {
