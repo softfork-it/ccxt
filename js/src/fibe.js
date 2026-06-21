@@ -33,7 +33,7 @@ export default class fibe extends Exchange {
                 'option': false,
                 'fetchMarkets': true,
                 'fetchCurrencies': false,
-                'fetchTicker': false,
+                'fetchTicker': true,
                 'fetchTickers': false,
                 'fetchOrderBook': true,
                 'fetchTrades': true,
@@ -78,6 +78,7 @@ export default class fibe extends Exchange {
                         'market': 1,
                         'all-mids': 1,
                         'market-stats': 1,
+                        'spot-asset-ctx': 1,
                         'l2book': 1,
                         'recent-market-trades': 1,
                         'candles': 1,
@@ -305,6 +306,69 @@ export default class fibe extends Exchange {
             'percentage': true,
             'tierBased': true,
         };
+    }
+    async fetchTicker(symbol, params = {}) {
+        /**
+         * @method
+         * @name fibe#fetchTicker
+         * @description fetches a price ticker, 24h volume, and 24h change for a spot market
+         * @see https://fb-4b8448ac.alephium.org/api/v1/spot-asset-ctx
+         * @param {string} symbol unified symbol of the market to fetch the ticker for
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {object} a [ticker structure]{@link https://docs.ccxt.com/#/?id=ticker-structure}
+         */
+        await this.loadMarkets();
+        const market = this.market(symbol);
+        const info = market['info'];
+        const request = {
+            'marketIndex': this.safeString(info, 'marketIndex'),
+        };
+        const response = await this.publicGetSpotAssetCtx(this.extend(request, params));
+        return this.parseTicker(response, market);
+    }
+    parseTicker(ticker, market = undefined) {
+        //
+        //     {
+        //         "midPx": "8.4557",
+        //         "bidPx": "8.4556",
+        //         "bidSz": "12.3",
+        //         "askPx": "8.4558",
+        //         "askSz": "45.6",
+        //         "midPx24hAgo": "8.8097",
+        //         "bv24h": "95734.1",
+        //         "qv24h": "809774.565507"
+        //     }
+        //
+        const last = this.safeString(ticker, 'midPx');
+        const open = this.safeString(ticker, 'midPx24hAgo');
+        let change = undefined;
+        let percentage = undefined;
+        if ((last !== undefined) && (open !== undefined)) {
+            change = Precise.stringSub(last, open);
+            percentage = Precise.stringMul(Precise.stringDiv(change, open), '100');
+        }
+        return this.safeTicker({
+            'symbol': this.safeSymbol(undefined, market),
+            'timestamp': undefined,
+            'datetime': undefined,
+            'high': undefined,
+            'low': undefined,
+            'bid': this.safeString(ticker, 'bidPx'),
+            'bidVolume': this.safeString(ticker, 'bidSz'),
+            'ask': this.safeString(ticker, 'askPx'),
+            'askVolume': this.safeString(ticker, 'askSz'),
+            'vwap': undefined,
+            'open': open,
+            'close': last,
+            'last': last,
+            'previousClose': undefined,
+            'change': change,
+            'percentage': percentage,
+            'average': undefined,
+            'baseVolume': this.safeString(ticker, 'bv24h'),
+            'quoteVolume': this.safeString(ticker, 'qv24h'),
+            'info': ticker,
+        }, market);
     }
     async fetchOrderBook(symbol, limit = undefined, params = {}) {
         /**
