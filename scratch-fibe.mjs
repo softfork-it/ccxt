@@ -7,6 +7,7 @@
 //     node scratch-fibe.mjs
 //     node scratch-fibe.mjs fetchTicker
 //     node scratch-fibe.mjs fetchTickers
+//     FIBE_SYMBOL='ETH/USDC:USDC' node scratch-fibe.mjs fetchTicker
 //     node scratch-fibe.mjs fetchTradingFee
 //
 // If `js/ccxt.js` doesn't exist yet, run a full `npm run build` once.
@@ -71,7 +72,8 @@ async function main () {
         }));
     }
 
-    const sym = symbols[0];
+    const sym = process.env.FIBE_SYMBOL || symbols[0];
+    assert (markets[sym] !== undefined, 'unknown symbol ' + sym);
     if (shouldRun ('market')) {
         print ('market', { symbol: sym, id: fibe.market (sym)['id'] });
     }
@@ -129,14 +131,14 @@ async function main () {
     }
 
     if (shouldRun ('fetchOpenOrders')) {
-        const openOrders = await fibe.fetchOpenOrders (undefined, undefined, 2, { user });
+        const openOrders = await fibe.fetchOpenOrders (process.env.FIBE_SYMBOL, undefined, 2, { user });
         assert (Array.isArray (openOrders), 'expected open orders array');
         assert (openOrders.length <= 2, 'open orders limit failed');
         print ('fetchOpenOrders', openOrders);
     }
 
     if (shouldRun ('fetchOrders')) {
-        const orders = await fibe.fetchOrders (undefined, undefined, 2, { user });
+        const orders = await fibe.fetchOrders (process.env.FIBE_SYMBOL, undefined, 2, { user });
         assert (Array.isArray (orders), 'expected historical orders array');
         assert (orders.length <= 2, 'historical orders limit failed');
         print ('fetchOrders', orders);

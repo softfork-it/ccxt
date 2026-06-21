@@ -26,7 +26,7 @@ export default class fibe extends Exchange {
             'dex': true,
             'has': {
                 'spot': true,
-                'swap': false,
+                'swap': true,
                 'margin': false,
                 'future': false,
                 'option': false,
@@ -78,6 +78,7 @@ export default class fibe extends Exchange {
                         'all-mids': 1,
                         'market-stats': 1,
                         'spot-asset-ctx': 1,
+                        'perp-asset-ctx': 1,
                         'l2book': 1,
                         'recent-market-trades': 1,
                         'candles': 1,
@@ -132,17 +133,7 @@ export default class fibe extends Exchange {
         //         }
         //     ]
         //
-        // keep spot markets only (drop perps; 'S' spot, 'P' perp, absent = spot)
-        const spotMarkets = [];
-        for (let i = 0; i < response.length; i++) {
-            const entry = response[i];
-            const marketType = this.safeString (entry, 'marketType');
-            if (marketType === 'P') {
-                continue;
-            }
-            spotMarkets.push (entry);
-        }
-        return this.parseMarkets (spotMarkets);
+        return this.parseMarkets (response);
     }
 
     parseMarket (market: Dict): Market {
@@ -316,8 +307,9 @@ export default class fibe extends Exchange {
         /**
          * @method
          * @name fibe#fetchTicker
-         * @description fetches a price ticker, 24h volume, and 24h change for a spot market
+         * @description fetches a price ticker, 24h volume, and 24h change for a market
          * @see https://fb-4b8448ac.alephium.org/api/v1/spot-asset-ctx
+         * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
          * @param {string} symbol unified symbol of the market to fetch the ticker for
          * @param {object} [params] extra parameters specific to the exchange API endpoint
          * @returns {object} a [ticker structure]{@link https://docs.ccxt.com/#/?id=ticker-structure}
@@ -328,7 +320,7 @@ export default class fibe extends Exchange {
         const request: Dict = {
             'marketIndex': this.safeString (info, 'marketIndex'),
         };
-        const response = await this.publicGetSpotAssetCtx (this.extend (request, params));
+        const response = market['spot'] ? await this.publicGetSpotAssetCtx (this.extend (request, params)) : await this.publicGetPerpAssetCtx (this.extend (request, params));
         return this.parseTicker (response, market);
     }
 
@@ -336,8 +328,9 @@ export default class fibe extends Exchange {
         /**
          * @method
          * @name fibe#fetchTickers
-         * @description fetches price tickers for multiple spot markets
+         * @description fetches price tickers for multiple markets
          * @see https://fb-4b8448ac.alephium.org/api/v1/spot-asset-ctx
+         * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
          * @param {string[]|undefined} symbols unified symbols of the markets to fetch tickers for, all market tickers are returned if not assigned
          * @param {object} [params] extra parameters specific to the exchange API endpoint
          * @returns {object} a dictionary of [ticker structures]{@link https://docs.ccxt.com/#/?id=ticker-structure}
@@ -365,7 +358,9 @@ export default class fibe extends Exchange {
         //         "askSz": "45.6",
         //         "midPx24hAgo": "8.8097",
         //         "bv24h": "95734.1",
-        //         "qv24h": "809774.565507"
+        //         "qv24h": "809774.565507",
+        //         "markPx": "8.4542",
+        //         "oraclePx": "8.4585"
         //     }
         //
         const last = this.safeString (ticker, 'midPx');
@@ -397,6 +392,8 @@ export default class fibe extends Exchange {
             'baseVolume': this.safeString (ticker, 'bv24h'),
             'quoteVolume': this.safeString (ticker, 'qv24h'),
             'info': ticker,
+            'indexPrice': this.safeString (ticker, 'oraclePx'),
+            'markPrice': this.safeString (ticker, 'markPx'),
         }, market);
     }
 

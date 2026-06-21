@@ -6,6 +6,7 @@ interface Exchange {
     publicGetAllMids(params?: {}): Promise<implicitReturnType>;
     publicGetMarketStats(params?: {}): Promise<implicitReturnType>;
     publicGetSpotAssetCtx(params?: {}): Promise<implicitReturnType>;
+    publicGetPerpAssetCtx(params?: {}): Promise<implicitReturnType>;
     publicGetL2book(params?: {}): Promise<implicitReturnType>;
     publicGetRecentMarketTrades(params?: {}): Promise<implicitReturnType>;
     publicGetCandles(params?: {}): Promise<implicitReturnType>;
