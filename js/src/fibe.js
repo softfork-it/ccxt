@@ -41,7 +41,8 @@ export default class fibe extends Exchange {
                 'fetchBalance': true,
                 'fetchOpenOrders': true,
                 'fetchOrders': true,
-                'fetchTradingFees': false,
+                'fetchTradingFee': true,
+                'fetchTradingFees': true,
                 'createOrder': false,
                 'cancelOrder': false,
             },
@@ -253,6 +254,57 @@ export default class fibe extends Exchange {
             result[code] = account;
         }
         return this.safeBalance(result);
+    }
+    async fetchTradingFees(params = {}) {
+        /**
+         * @method
+         * @name fibe#fetchTradingFees
+         * @description fetch the user trading fees for all loaded spot markets
+         * @see https://fb-4b8448ac.alephium.org/api/v1/user-fees
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @returns {object} a dictionary of [fee structures]{@link https://docs.ccxt.com/#/?id=fee-structure} indexed by market symbols
+         */
+        let userAddress = undefined;
+        [userAddress, params] = this.handlePublicAddress('fetchTradingFees', params);
+        await this.loadMarkets();
+        const result = {};
+        for (let i = 0; i < this.symbols.length; i++) {
+            const symbol = this.symbols[i];
+            result[symbol] = await this.fetchTradingFee(symbol, this.extend({ 'user': userAddress }, params));
+        }
+        return result;
+    }
+    async fetchTradingFee(symbol, params = {}) {
+        /**
+         * @method
+         * @name fibe#fetchTradingFee
+         * @description fetch the user trading fees for one spot market
+         * @see https://fb-4b8448ac.alephium.org/api/v1/user-fees
+         * @param {string} symbol unified market symbol
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @returns {object} a [fee structure]{@link https://docs.ccxt.com/#/?id=fee-structure}
+         */
+        let userAddress = undefined;
+        [userAddress, params] = this.handlePublicAddress('fetchTradingFee', params);
+        await this.loadMarkets();
+        const market = this.market(symbol);
+        const info = market['info'];
+        const request = {
+            'user': userAddress,
+            'marketIndex': this.safeString(info, 'marketIndex'),
+            'marketType': this.safeString(info, 'marketType', 'S'),
+        };
+        const response = await this.publicGetUserFees(this.extend(request, params));
+        return {
+            'info': response,
+            'symbol': symbol,
+            'maker': this.safeNumber(response, 'userAddRate'),
+            'taker': this.safeNumber(response, 'userCrossRate'),
+            'percentage': true,
+            'tierBased': true,
+        };
     }
     async fetchOrderBook(symbol, limit = undefined, params = {}) {
         /**
@@ -501,7 +553,7 @@ export default class fibe extends Exchange {
         //         "updatedAt": 1
         //     }
         //
-        const marketIndex = this.safeString2(order, 'marketIndex', 'market');
+        const marketIndex = this.safeString(order, 'marketIndex');
         const marketType = this.safeString(order, 'marketType');
         let marketId = undefined;
         if (marketIndex !== undefined) {
@@ -583,9 +635,6 @@ export default class fibe extends Exchange {
         const timestamp = this.safeInteger(order, key);
         if (timestamp === undefined) {
             return undefined;
-        }
-        if (timestamp > 9999999999) {
-            return timestamp;
         }
         return timestamp * 1000;
     }

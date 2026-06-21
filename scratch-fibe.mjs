@@ -5,12 +5,31 @@
 //     npm install            # once
 //     npm run tsBuild        # tsc -> js/   (re-run after each edit to ts/src/fibe.ts)
 //     node scratch-fibe.mjs
+//     node scratch-fibe.mjs fetchTradingFee
 //
 // If `js/ccxt.js` doesn't exist yet, run a full `npm run build` once.
 
 import ccxt from './js/ccxt.js';
 
-const fibe = new ccxt.fibe ({});
+const fibe = new ccxt.fibe ({ timeout: 20000 });
+const available = [
+    'fetchMarkets',
+    'market',
+    'fetchOrderBook',
+    'fetchTrades',
+    'fetchOHLCV',
+    'fetchBalance',
+    'fetchTradingFee',
+    'fetchOpenOrders',
+    'fetchOrders',
+];
+const selected = new Set (process.argv.slice (2));
+const unknown = [ ...selected ].filter ((name) => !available.includes (name));
+if (unknown.length > 0) {
+    console.error ('Unknown target(s): ' + unknown.join (', '));
+    console.error ('Available targets:\n  ' + available.join ('\n  '));
+    process.exit (1);
+}
 
 function assert (condition, message) {
     if (!condition) {
@@ -18,15 +37,24 @@ function assert (condition, message) {
     }
 }
 
+function shouldRun (name) {
+    return selected.size === 0 || selected.has (name);
+}
+
+function print (name, value) {
+    console.log ('\n' + name + ':');
+    console.dir (value, { depth: null });
+}
+
 async function main () {
     // loadMarkets() calls fetchMarkets() and indexes them, so fibe.market() works.
     const markets = await fibe.loadMarkets ();
     const symbols = Object.keys (markets);
     assert (symbols.length > 0, 'expected at least one market');
-    console.log ('fetched', symbols.length, 'markets\n');
-    for (let i = 0; i < Math.min (5, symbols.length); i++) {
-        const m = markets[symbols[i]];
-        console.log ({
+    if (shouldRun ('fetchMarkets')) {
+        print ('fetchMarkets', symbols.slice (0, 5).map ((symbol) => {
+            const m = markets[symbol];
+            return {
             id: m['id'],
             symbol: m['symbol'],
             type: m['type'],
@@ -35,48 +63,66 @@ async function main () {
             spot: m['spot'],
             swap: m['swap'],
             precision: m['precision'],
-        });
+            };
+        }));
     }
 
     const sym = symbols[0];
-    console.log ('\nmarket(' + sym + ').id =', fibe.market (sym)['id']);
+    if (shouldRun ('market')) {
+        print ('market', { symbol: sym, id: fibe.market (sym)['id'] });
+    }
 
-    const ob = await fibe.fetchOrderBook (sym, 1);
-    assert (ob['bids'].length <= 1, 'order book bid limit failed');
-    assert (ob['asks'].length <= 1, 'order book ask limit failed');
-    console.log ('\norder book for', sym);
-    console.log ('  bids[0..2]:', ob['bids'].slice (0, 3));
-    console.log ('  asks[0..2]:', ob['asks'].slice (0, 3));
+    if (shouldRun ('fetchOrderBook')) {
+        const ob = await fibe.fetchOrderBook (sym, 1);
+        assert (ob['bids'].length <= 1, 'order book bid limit failed');
+        assert (ob['asks'].length <= 1, 'order book ask limit failed');
+        print ('fetchOrderBook', ob);
+    }
 
-    const trades = await fibe.fetchTrades (sym, undefined, 3);
-    assert (trades.length > 0, 'expected recent trades');
-    assert (trades.length <= 3, 'trade limit failed');
-    assert (trades[0]['symbol'] === sym, 'trade symbol mismatch');
-    console.log ('\ntrades:', trades);
+    if (shouldRun ('fetchTrades')) {
+        const trades = await fibe.fetchTrades (sym, undefined, 3);
+        assert (trades.length > 0, 'expected recent trades');
+        assert (trades.length <= 3, 'trade limit failed');
+        assert (trades[0]['symbol'] === sym, 'trade symbol mismatch');
+        print ('fetchTrades', trades);
+    }
 
     // ponytail: candles are sparse, use a wider live window and let CCXT trim to 3.
     const until = Date.now ();
     const since = until - 24 * 60 * 60 * 1000;
-    const ohlcv = await fibe.fetchOHLCV (sym, '1m', since, 3, { until });
-    assert (ohlcv.length > 0, 'expected candles');
-    assert (ohlcv.length <= 3, 'OHLCV limit failed');
-    console.log ('\nohlcv:', ohlcv);
+    if (shouldRun ('fetchOHLCV')) {
+        const ohlcv = await fibe.fetchOHLCV (sym, '1m', since, 3, { until });
+        assert (ohlcv.length > 0, 'expected candles');
+        assert (ohlcv.length <= 3, 'OHLCV limit failed');
+        print ('fetchOHLCV', ohlcv);
+    }
 
     const user = process.env.FIBE_USER || '11111111111111111111111111111111';
-    const balance = await fibe.fetchBalance ({ user });
-    assert (balance['info']['user'] === user, 'balance user mismatch');
-    console.log ('\nbalance:');
-    console.dir (balance, { depth: null });
+    if (shouldRun ('fetchBalance')) {
+        const balance = await fibe.fetchBalance ({ user });
+        assert (balance['info']['user'] === user, 'balance user mismatch');
+        print ('fetchBalance', balance);
+    }
 
-    const openOrders = await fibe.fetchOpenOrders (undefined, undefined, 2, { user });
-    assert (Array.isArray (openOrders), 'expected open orders array');
-    assert (openOrders.length <= 2, 'open orders limit failed');
-    console.log ('\nopen orders:', openOrders);
+    if (shouldRun ('fetchTradingFee')) {
+        const tradingFee = await fibe.fetchTradingFee (sym, { user });
+        assert (tradingFee['symbol'] === sym, 'trading fee symbol mismatch');
+        print ('fetchTradingFee', tradingFee);
+    }
 
-    const orders = await fibe.fetchOrders (undefined, undefined, 2, { user });
-    assert (Array.isArray (orders), 'expected historical orders array');
-    assert (orders.length <= 2, 'historical orders limit failed');
-    console.log ('\nhistorical orders:', orders);
+    if (shouldRun ('fetchOpenOrders')) {
+        const openOrders = await fibe.fetchOpenOrders (undefined, undefined, 2, { user });
+        assert (Array.isArray (openOrders), 'expected open orders array');
+        assert (openOrders.length <= 2, 'open orders limit failed');
+        print ('fetchOpenOrders', openOrders);
+    }
+
+    if (shouldRun ('fetchOrders')) {
+        const orders = await fibe.fetchOrders (undefined, undefined, 2, { user });
+        assert (Array.isArray (orders), 'expected historical orders array');
+        assert (orders.length <= 2, 'historical orders limit failed');
+        print ('fetchOrders', orders);
+    }
 }
 
 main ().catch ((e) => { console.error (e); process.exit (1); });

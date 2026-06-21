@@ -5,7 +5,7 @@ import Exchange from './abstract/fibe.js';
 import { ArgumentsRequired } from './base/errors.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { Precise } from './base/Precise.js';
-import type { Balances, Dict, Market, OHLCV, Order, OrderBook, Trade, Str, Int, int } from './base/types.js';
+import type { Balances, Dict, Market, OHLCV, Order, OrderBook, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -40,7 +40,8 @@ export default class fibe extends Exchange {
                 'fetchBalance': true,
                 'fetchOpenOrders': true,
                 'fetchOrders': true,
-                'fetchTradingFees': false,
+                'fetchTradingFee': true,
+                'fetchTradingFees': true,
                 'createOrder': false,
                 'cancelOrder': false,
             },
@@ -255,6 +256,59 @@ export default class fibe extends Exchange {
             result[code] = account;
         }
         return this.safeBalance (result);
+    }
+
+    async fetchTradingFees (params = {}): Promise<TradingFees> {
+        /**
+         * @method
+         * @name fibe#fetchTradingFees
+         * @description fetch the user trading fees for all loaded spot markets
+         * @see https://fb-4b8448ac.alephium.org/api/v1/user-fees
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @returns {object} a dictionary of [fee structures]{@link https://docs.ccxt.com/#/?id=fee-structure} indexed by market symbols
+         */
+        let userAddress = undefined;
+        [ userAddress, params ] = this.handlePublicAddress ('fetchTradingFees', params);
+        await this.loadMarkets ();
+        const result: Dict = {};
+        for (let i = 0; i < this.symbols.length; i++) {
+            const symbol = this.symbols[i];
+            result[symbol] = await this.fetchTradingFee (symbol, this.extend ({ 'user': userAddress }, params));
+        }
+        return result;
+    }
+
+    async fetchTradingFee (symbol: string, params = {}): Promise<TradingFeeInterface> {
+        /**
+         * @method
+         * @name fibe#fetchTradingFee
+         * @description fetch the user trading fees for one spot market
+         * @see https://fb-4b8448ac.alephium.org/api/v1/user-fees
+         * @param {string} symbol unified market symbol
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @returns {object} a [fee structure]{@link https://docs.ccxt.com/#/?id=fee-structure}
+         */
+        let userAddress = undefined;
+        [ userAddress, params ] = this.handlePublicAddress ('fetchTradingFee', params);
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const info = market['info'];
+        const request: Dict = {
+            'user': userAddress,
+            'marketIndex': this.safeString (info, 'marketIndex'),
+            'marketType': this.safeString (info, 'marketType', 'S'),
+        };
+        const response = await this.publicGetUserFees (this.extend (request, params));
+        return {
+            'info': response,
+            'symbol': symbol,
+            'maker': this.safeNumber (response, 'userAddRate'),
+            'taker': this.safeNumber (response, 'userCrossRate'),
+            'percentage': true,
+            'tierBased': true,
+        };
     }
 
     async fetchOrderBook (symbol: string, limit: Int = undefined, params = {}): Promise<OrderBook> {
