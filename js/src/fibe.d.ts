@@ -1,5 +1,5 @@
 import Exchange from './abstract/fibe.js';
-import type { Balances, Dict, Market, OHLCV, Order, OrderBook, Strings, Ticker, Tickers, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
+import type { Balances, Dict, Market, OHLCV, Order, OrderBook, Position, Strings, Ticker, Tickers, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
 /**
  * @class fibe
  * @augments Exchange
@@ -10,6 +10,8 @@ export default class fibe extends Exchange {
     fetchMarkets(params?: {}): Promise<Market[]>;
     parseMarket(market: Dict): Market;
     fetchBalance(params?: {}): Promise<Balances>;
+    fetchPositions(symbols?: Strings, params?: {}): Promise<Position[]>;
+    parsePosition(position: Dict, market?: Market): Position;
     fetchTradingFees(params?: {}): Promise<TradingFees>;
     fetchTradingFee(symbol: string, params?: {}): Promise<TradingFeeInterface>;
     fetchTicker(symbol: string, params?: {}): Promise<Ticker>;

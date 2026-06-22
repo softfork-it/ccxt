@@ -39,6 +39,7 @@ export default class fibe extends Exchange {
                 'fetchTrades': true,
                 'fetchOHLCV': true,
                 'fetchBalance': true,
+                'fetchPositions': true,
                 'fetchOpenOrders': true,
                 'fetchOrders': true,
                 'fetchTradingFee': true,
@@ -246,6 +247,136 @@ export default class fibe extends Exchange {
             result[code] = account;
         }
         return this.safeBalance(result);
+    }
+    async fetchPositions(symbols = undefined, params = {}) {
+        /**
+         * @method
+         * @name fibe#fetchPositions
+         * @description fetch open perp positions for a user
+         * @see https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state
+         * @param {string[]|undefined} symbols list of unified market symbols
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @returns {object[]} a list of [position structures]{@link https://docs.ccxt.com/#/?id=position-structure}
+         */
+        let userAddress = undefined;
+        [userAddress, params] = this.handlePublicAddress('fetchPositions', params);
+        await this.loadMarkets();
+        symbols = this.marketSymbols(symbols, 'swap');
+        const request = {
+            'user': userAddress,
+        };
+        const response = await this.publicGetAllClearinghouseState(this.extend(request, params));
+        //
+        //     {
+        //         "user": "11111111111111111111111111111111",
+        //         "states": [
+        //             {
+        //                 "user": "11111111111111111111111111111111",
+        //                 "subAccountIndex": 2,
+        //                 "quoteMint": "11111111111111111111111111111111",
+        //                 "clearinghouseState": {
+        //                     "assetPositions": [
+        //                         {
+        //                             "marketIndex": "1",
+        //                             "entryPx": "1.2",
+        //                             "leverage": { "type": "cross", "value": 3 },
+        //                             "liquidationPx": "4.5",
+        //                             "marginUsed": "6.7",
+        //                             "positionValue": "8.9",
+        //                             "returnOnEquity": "1.1",
+        //                             "szi": "2.3",
+        //                             "unrealizedPnl": "-4.5"
+        //                         }
+        //                     ]
+        //                 }
+        //             }
+        //         ]
+        //     }
+        //
+        const states = this.safeList(response, 'states', []);
+        const result = [];
+        for (let i = 0; i < states.length; i++) {
+            const state = states[i];
+            const clearinghouseState = this.safeDict(state, 'clearinghouseState', {});
+            const positions = this.safeList(clearinghouseState, 'assetPositions', []);
+            for (let j = 0; j < positions.length; j++) {
+                const position = this.extend({
+                    'user': this.safeString(state, 'user'),
+                    'subAccountIndex': this.safeInteger(state, 'subAccountIndex'),
+                    'quoteMint': this.safeString(state, 'quoteMint'),
+                }, positions[j]);
+                result.push(this.parsePosition(position));
+            }
+        }
+        return this.filterByArrayPositions(result, 'symbol', symbols, false);
+    }
+    parsePosition(position, market = undefined) {
+        //
+        //     {
+        //         "user": "11111111111111111111111111111111",
+        //         "subAccountIndex": 2,
+        //         "quoteMint": "11111111111111111111111111111111",
+        //         "marketIndex": "1",
+        //         "entryPx": "1.2",
+        //         "leverage": { "type": "cross", "value": 3 },
+        //         "liquidationPx": "4.5",
+        //         "markPx": "5.6",
+        //         "marginUsed": "6.7",
+        //         "maintenanceMargin": "7.8",
+        //         "positionValue": "8.9",
+        //         "returnOnEquity": "1.1",
+        //         "szi": "2.3",
+        //         "unrealizedPnl": "-4.5",
+        //         "maxLeverage": 10
+        //     }
+        //
+        const marketIndex = this.safeString(position, 'marketIndex');
+        const marketId = (marketIndex === undefined) ? undefined : 'perp:' + marketIndex;
+        market = this.safeMarket(marketId, market);
+        const leverage = this.safeDict(position, 'leverage', {});
+        const marginMode = this.safeString(leverage, 'type');
+        const size = this.safeString(position, 'szi');
+        let side = undefined;
+        if (Precise.stringGt(size, '0')) {
+            side = 'long';
+        }
+        else if (Precise.stringLt(size, '0')) {
+            side = 'short';
+        }
+        const marginUsed = this.safeString(position, 'marginUsed');
+        const returnOnEquity = this.safeString(position, 'returnOnEquity');
+        const percentage = (returnOnEquity === undefined) ? undefined : Precise.stringMul(returnOnEquity, '100');
+        return this.safePosition({
+            'info': position,
+            'id': undefined,
+            'symbol': market['symbol'],
+            'timestamp': undefined,
+            'datetime': undefined,
+            'contracts': this.parseNumber(Precise.stringAbs(size)),
+            'contractSize': this.safeNumber(market, 'contractSize'),
+            'side': side,
+            'notional': this.safeNumber(position, 'positionValue'),
+            'leverage': this.safeNumber(leverage, 'value'),
+            'unrealizedPnl': this.safeNumber(position, 'unrealizedPnl'),
+            'realizedPnl': undefined,
+            'collateral': this.parseNumber(marginUsed),
+            'entryPrice': this.safeNumber(position, 'entryPx'),
+            'markPrice': this.safeNumber(position, 'markPx'),
+            'liquidationPrice': this.safeNumber(position, 'liquidationPx'),
+            'marginMode': marginMode,
+            'hedged': undefined,
+            'maintenanceMargin': this.safeNumber(position, 'maintenanceMargin'),
+            'maintenanceMarginPercentage': undefined,
+            'initialMargin': this.parseNumber(marginUsed),
+            'initialMarginPercentage': undefined,
+            'marginRatio': undefined,
+            'lastUpdateTimestamp': undefined,
+            'lastPrice': undefined,
+            'stopLossPrice': undefined,
+            'takeProfitPrice': undefined,
+            'percentage': this.parseNumber(percentage),
+        });
     }
     async fetchTradingFees(params = {}) {
         /**

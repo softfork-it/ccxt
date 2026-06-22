@@ -9,6 +9,7 @@
 //     node scratch-fibe.mjs fetchTickers
 //     FIBE_SYMBOL='ETH/USDC:USDC' node scratch-fibe.mjs fetchTicker
 //     node scratch-fibe.mjs fetchTradingFee
+//     FIBE_USER=... node scratch-fibe.mjs fetchPositions
 //
 // If `js/ccxt.js` doesn't exist yet, run a full `npm run build` once.
 
@@ -24,6 +25,7 @@ const available = [
     'fetchTrades',
     'fetchOHLCV',
     'fetchBalance',
+    'fetchPositions',
     'fetchTradingFee',
     'fetchOpenOrders',
     'fetchOrders',
@@ -122,6 +124,16 @@ async function main () {
         const balance = await fibe.fetchBalance ({ user });
         assert (balance['info']['user'] === user, 'balance user mismatch');
         print ('fetchBalance', balance);
+    }
+
+    if (shouldRun ('fetchPositions')) {
+        const positionSymbols = (process.env.FIBE_SYMBOL === undefined) ? undefined : [ sym ];
+        const positions = await fibe.fetchPositions (positionSymbols, { user });
+        assert (Array.isArray (positions), 'expected positions array');
+        if (positionSymbols !== undefined) {
+            assert (positions.every ((position) => position['symbol'] === sym), 'position symbol mismatch');
+        }
+        print ('fetchPositions', positions);
     }
 
     if (shouldRun ('fetchTradingFee')) {
