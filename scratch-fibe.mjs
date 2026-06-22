@@ -8,6 +8,7 @@
 //     node scratch-fibe.mjs fetchTicker
 //     node scratch-fibe.mjs fetchTickers
 //     FIBE_SYMBOL='ETH/USDC:USDC' node scratch-fibe.mjs fetchTicker
+//     node scratch-fibe.mjs fetchFundingRate
 //     node scratch-fibe.mjs fetchTradingFee
 //     FIBE_USER=... node scratch-fibe.mjs fetchPositions
 //     FIBE_USER=... node scratch-fibe.mjs fetchFundingHistory
@@ -27,6 +28,7 @@ const available = [
     'fetchOHLCV',
     'fetchBalance',
     'fetchPositions',
+    'fetchFundingRate',
     'fetchFundingHistory',
     'fetchTradingFee',
     'fetchOpenOrders',
@@ -86,6 +88,18 @@ async function main () {
         const ticker = await fibe.fetchTicker (sym);
         assert (ticker['symbol'] === sym, 'ticker symbol mismatch');
         print ('fetchTicker', ticker);
+    }
+
+    if (shouldRun ('fetchFundingRate')) {
+        const swapSymbols = symbols.filter ((symbol) => markets[symbol]['swap']);
+        const fundingSym = process.env.FIBE_SYMBOL || swapSymbols[0];
+        assert (fundingSym !== undefined, 'expected at least one swap market');
+        assert (markets[fundingSym] !== undefined, 'unknown symbol ' + fundingSym);
+        assert (markets[fundingSym]['swap'], 'funding rate symbol must be a swap market');
+        const fundingRate = await fibe.fetchFundingRate (fundingSym);
+        assert (fundingRate['symbol'] === fundingSym, 'funding rate symbol mismatch');
+        assert (typeof fundingRate['fundingRate'] === 'number', 'expected numeric funding rate');
+        print ('fetchFundingRate', fundingRate);
     }
 
     if (shouldRun ('fetchTickers')) {

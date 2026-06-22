@@ -2,10 +2,10 @@
 //  ---------------------------------------------------------------------------
 
 import Exchange from './abstract/fibe.js';
-import { ArgumentsRequired } from './base/errors.js';
+import { ArgumentsRequired, ExchangeError } from './base/errors.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { Precise } from './base/Precise.js';
-import type { Balances, Dict, FundingHistory, Market, OHLCV, Order, OrderBook, Position, Strings, Ticker, Tickers, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
+import type { Balances, Dict, FundingHistory, FundingRate, Market, OHLCV, Order, OrderBook, Position, Strings, Ticker, Tickers, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -39,6 +39,7 @@ export default class fibe extends Exchange {
                 'fetchOHLCV': true,
                 'fetchBalance': true,
                 'fetchPositions': true,
+                'fetchFundingRate': true,
                 'fetchFundingHistory': true,
                 'fetchOpenOrders': true,
                 'fetchOrders': true,
@@ -594,6 +595,61 @@ export default class fibe extends Exchange {
             'indexPrice': this.safeString (ticker, 'oraclePx'),
             'markPrice': this.safeString (ticker, 'markPx'),
         }, market);
+    }
+
+    async fetchFundingRate (symbol: string, params = {}): Promise<FundingRate> {
+        /**
+         * @method
+         * @name fibe#fetchFundingRate
+         * @description fetch the current funding rate
+         * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
+         * @param {string} symbol unified market symbol
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {object} a [funding rate structure]{@link https://docs.ccxt.com/#/?id=funding-rate-structure}
+         */
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        if (!market['swap']) {
+            throw new ExchangeError (this.id + ' fetchFundingRate() is only valid for swap markets');
+        }
+        const info = market['info'];
+        const request: Dict = {
+            'marketIndex': this.safeString (info, 'marketIndex'),
+        };
+        const response = await this.publicGetPerpAssetCtx (this.extend (request, params));
+        return this.parseFundingRate (response, market);
+    }
+
+    parseFundingRate (contract: any, market: Market = undefined): FundingRate {
+        //
+        //     {
+        //         "midPx": "1730",
+        //         "markPx": "1730.4",
+        //         "oraclePx": "1730.1",
+        //         "funding": "0.000012",
+        //         "premium": "0.000337"
+        //     }
+        //
+        return {
+            'info': contract,
+            'symbol': this.safeSymbol (undefined, market),
+            'markPrice': this.safeNumber (contract, 'markPx'),
+            'indexPrice': this.safeNumber (contract, 'oraclePx'),
+            'interestRate': undefined,
+            'estimatedSettlePrice': undefined,
+            'timestamp': undefined,
+            'datetime': undefined,
+            'fundingRate': this.safeNumber (contract, 'funding'),
+            'fundingTimestamp': undefined,
+            'fundingDatetime': undefined,
+            'nextFundingRate': undefined,
+            'nextFundingTimestamp': undefined,
+            'nextFundingDatetime': undefined,
+            'previousFundingRate': undefined,
+            'previousFundingTimestamp': undefined,
+            'previousFundingDatetime': undefined,
+            'interval': '1h',
+        } as FundingRate;
     }
 
     async fetchOrderBook (symbol: string, limit: Int = undefined, params = {}): Promise<OrderBook> {
