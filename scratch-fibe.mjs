@@ -10,6 +10,7 @@
 //     FIBE_SYMBOL='ETH/USDC:USDC' node scratch-fibe.mjs fetchTicker
 //     node scratch-fibe.mjs fetchTradingFee
 //     FIBE_USER=... node scratch-fibe.mjs fetchPositions
+//     FIBE_USER=... node scratch-fibe.mjs fetchFundingHistory
 //
 // If `js/ccxt.js` doesn't exist yet, run a full `npm run build` once.
 
@@ -26,6 +27,7 @@ const available = [
     'fetchOHLCV',
     'fetchBalance',
     'fetchPositions',
+    'fetchFundingHistory',
     'fetchTradingFee',
     'fetchOpenOrders',
     'fetchOrders',
@@ -134,6 +136,20 @@ async function main () {
             assert (positions.every ((position) => position['symbol'] === sym), 'position symbol mismatch');
         }
         print ('fetchPositions', positions);
+    }
+
+    if (shouldRun ('fetchFundingHistory')) {
+        const fundingSymbol = (process.env.FIBE_SYMBOL === undefined) ? undefined : sym;
+        const fundingSince = Date.now () - 7 * 24 * 60 * 60 * 1000;
+        const fundingHistory = await fibe.fetchFundingHistory (fundingSymbol, fundingSince, 3, { user });
+        assert (Array.isArray (fundingHistory), 'expected funding history array');
+        assert (fundingHistory.length <= 3, 'funding history limit failed');
+        assert (fundingHistory.every ((funding) => funding['rate'] === undefined), 'funding history rate should not be set');
+        assert (fundingHistory.every ((funding) => !Object.prototype.hasOwnProperty.call (funding['info'], 'fundingRate')), 'funding history info should not include fundingRate');
+        if (fundingSymbol !== undefined) {
+            assert (fundingHistory.every ((funding) => funding['symbol'] === sym), 'funding history symbol mismatch');
+        }
+        print ('fetchFundingHistory', fundingHistory);
     }
 
     if (shouldRun ('fetchTradingFee')) {

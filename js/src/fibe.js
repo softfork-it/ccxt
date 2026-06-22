@@ -40,6 +40,7 @@ export default class fibe extends Exchange {
                 'fetchOHLCV': true,
                 'fetchBalance': true,
                 'fetchPositions': true,
+                'fetchFundingHistory': true,
                 'fetchOpenOrders': true,
                 'fetchOrders': true,
                 'fetchTradingFee': true,
@@ -377,6 +378,70 @@ export default class fibe extends Exchange {
             'takeProfitPrice': undefined,
             'percentage': this.parseNumber(percentage),
         });
+    }
+    async fetchFundingHistory(symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        /**
+         * @method
+         * @name fibe#fetchFundingHistory
+         * @description fetch the history of funding payments paid and received on this account
+         * @see https://fb-4b8448ac.alephium.org/api/v1/user-funding-history
+         * @param {string} [symbol] unified market symbol
+         * @param {int} [since] the earliest time in ms to fetch funding history for
+         * @param {int} [limit] the maximum number of funding history structures to retrieve
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {int} [params.until] the latest time in ms to fetch funding history for
+         * @returns {object[]} a list of [funding history structures]{@link https://docs.ccxt.com/#/?id=funding-history-structure}
+         */
+        await this.loadMarkets();
+        let market = undefined;
+        if (symbol !== undefined) {
+            market = this.market(symbol);
+        }
+        let userAddress = undefined;
+        [userAddress, params] = this.handlePublicAddress('fetchFundingHistory', params);
+        let until = undefined;
+        [until, params] = this.handleOptionAndParams(params, 'fetchFundingHistory', 'until');
+        const request = {
+            'user': userAddress,
+            'startTime': (since === undefined) ? 0 : this.parseToInt(since / 1000),
+        };
+        if (until !== undefined) {
+            request['endTime'] = this.parseToInt(until / 1000);
+        }
+        const response = await this.publicGetUserFundingHistory(this.extend(request, params));
+        return this.parseIncomes(response, market, since, limit);
+    }
+    parseIncome(income, market = undefined) {
+        //
+        //     {
+        //         "time": 1781672400,
+        //         "marketIndex": "1",
+        //         "marketType": "P",
+        //         "usdc": "2.3",
+        //         "szi": "4.5",
+        //         "fundingRate": "6.7" // funding index delta, omitted from parsed output
+        //     }
+        //
+        const marketIndex = this.safeString(income, 'marketIndex');
+        const marketType = this.safeString(income, 'marketType');
+        let marketId = undefined;
+        if (marketIndex !== undefined) {
+            const idPrefix = (marketType === 'P') ? 'perp:' : 'spot:';
+            marketId = idPrefix + marketIndex;
+        }
+        market = this.safeMarket(marketId, market);
+        const timestamp = this.safeTimestamp(income, 'time');
+        const info = this.omit(income, 'fundingRate');
+        return {
+            'info': info,
+            'symbol': market['symbol'],
+            'code': this.safeString(market, 'settle', 'USDC'),
+            'timestamp': timestamp,
+            'datetime': this.iso8601(timestamp),
+            'id': undefined,
+            'amount': this.safeNumber(income, 'usdc'),
+        };
     }
     async fetchTradingFees(params = {}) {
         /**
