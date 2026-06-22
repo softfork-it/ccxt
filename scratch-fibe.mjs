@@ -9,6 +9,7 @@
 //     node scratch-fibe.mjs fetchTickers
 //     FIBE_SYMBOL='ETH/USDC:USDC' node scratch-fibe.mjs fetchTicker
 //     node scratch-fibe.mjs fetchFundingRate
+//     node scratch-fibe.mjs fetchFundingRates
 //     node scratch-fibe.mjs fetchTradingFee
 //     FIBE_USER=... node scratch-fibe.mjs fetchPositions
 //     FIBE_USER=... node scratch-fibe.mjs fetchFundingHistory
@@ -29,6 +30,7 @@ const available = [
     'fetchBalance',
     'fetchPositions',
     'fetchFundingRate',
+    'fetchFundingRates',
     'fetchFundingHistory',
     'fetchTradingFee',
     'fetchOpenOrders',
@@ -100,6 +102,17 @@ async function main () {
         assert (fundingRate['symbol'] === fundingSym, 'funding rate symbol mismatch');
         assert (typeof fundingRate['fundingRate'] === 'number', 'expected numeric funding rate');
         print ('fetchFundingRate', fundingRate);
+    }
+
+    if (shouldRun ('fetchFundingRates')) {
+        const swapSymbols = symbols.filter ((symbol) => markets[symbol]['swap']);
+        const fundingSymbols = (process.env.FIBE_SYMBOL === undefined) ? undefined : [ process.env.FIBE_SYMBOL ];
+        const expectedSymbols = fundingSymbols || swapSymbols;
+        const fundingRates = await fibe.fetchFundingRates (fundingSymbols);
+        assert (Object.keys (fundingRates).length === expectedSymbols.length, 'funding rates count mismatch');
+        assert (expectedSymbols.every ((symbol) => fundingRates[symbol] !== undefined), 'missing funding rate symbol');
+        assert (expectedSymbols.every ((symbol) => typeof fundingRates[symbol]['fundingRate'] === 'number'), 'expected numeric funding rates');
+        print ('fetchFundingRates', fundingRates);
     }
 
     if (shouldRun ('fetchTickers')) {

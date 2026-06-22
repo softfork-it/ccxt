@@ -5,7 +5,7 @@ import Exchange from './abstract/fibe.js';
 import { ArgumentsRequired, ExchangeError } from './base/errors.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { Precise } from './base/Precise.js';
-import type { Balances, Dict, FundingHistory, FundingRate, Market, OHLCV, Order, OrderBook, Position, Strings, Ticker, Tickers, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
+import type { Balances, Dict, FundingHistory, FundingRate, FundingRates, Market, OHLCV, Order, OrderBook, Position, Strings, Ticker, Tickers, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -40,6 +40,7 @@ export default class fibe extends Exchange {
                 'fetchBalance': true,
                 'fetchPositions': true,
                 'fetchFundingRate': true,
+                'fetchFundingRates': true,
                 'fetchFundingHistory': true,
                 'fetchOpenOrders': true,
                 'fetchOrders': true,
@@ -618,6 +619,36 @@ export default class fibe extends Exchange {
         };
         const response = await this.publicGetPerpAssetCtx (this.extend (request, params));
         return this.parseFundingRate (response, market);
+    }
+
+    async fetchFundingRates (symbols: Strings = undefined, params = {}): Promise<FundingRates> {
+        /**
+         * @method
+         * @name fibe#fetchFundingRates
+         * @description fetches the current funding rates for multiple swap markets
+         * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
+         * @param {string[]} [symbols] unified market symbols
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {object} a dictionary of [funding rates structures]{@link https://docs.ccxt.com/#/?id=funding-rates-structure}
+         */
+        await this.loadMarkets ();
+        symbols = this.marketSymbols (symbols, 'swap');
+        if (symbols === undefined) {
+            symbols = [];
+            const marketSymbols = Object.keys (this.markets);
+            for (let i = 0; i < marketSymbols.length; i++) {
+                const symbol = marketSymbols[i];
+                if (this.markets[symbol]['swap']) {
+                    symbols.push (symbol);
+                }
+            }
+        }
+        const result: FundingRates = {};
+        for (let i = 0; i < symbols.length; i++) {
+            const fundingRate = await this.fetchFundingRate (symbols[i], params);
+            result[symbols[i]] = fundingRate;
+        }
+        return result;
     }
 
     parseFundingRate (contract: any, market: Market = undefined): FundingRate {
