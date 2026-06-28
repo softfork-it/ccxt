@@ -6,8 +6,11 @@
 
 //  ---------------------------------------------------------------------------
 import Exchange from './abstract/fibe.js';
-import { ArgumentsRequired, ExchangeError } from './base/errors.js';
+import { ArgumentsRequired, AuthenticationError, ExchangeError, InvalidOrder } from './base/errors.js';
 import { TICK_SIZE } from './base/functions/number.js';
+import { eddsa } from './base/functions/crypto.js';
+import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
+import { ed25519 } from './static_dependencies/noble-curves/ed25519.js';
 import { Precise } from './base/Precise.js';
 //  ---------------------------------------------------------------------------
 /**
@@ -26,31 +29,35 @@ export default class fibe extends Exchange {
             'version': 'v1',
             'dex': true,
             'has': {
+                'CORS': undefined,
                 'spot': true,
-                'swap': true,
                 'margin': false,
+                'swap': true,
                 'future': false,
                 'option': false,
-                'fetchMarkets': true,
-                'fetchCurrencies': false,
-                'fetchTicker': true,
-                'fetchTickers': true,
-                'fetchOrderBook': true,
-                'fetchTrades': true,
-                'fetchOHLCV': true,
+                'cancelOrder': true,
+                'createOrder': true,
                 'fetchBalance': true,
-                'fetchPositions': true,
+                'fetchCurrencies': false,
+                'fetchFundingHistory': true,
                 'fetchFundingRate': true,
                 'fetchFundingRates': true,
-                'fetchFundingHistory': true,
+                'fetchMarkets': true,
+                'fetchOHLCV': true,
                 'fetchOpenOrders': true,
+                'fetchOrderBook': true,
                 'fetchOrders': true,
+                'fetchPositions': true,
+                'fetchTicker': true,
+                'fetchTickers': true,
+                'fetchTrades': true,
                 'fetchTradingFee': true,
                 'fetchTradingFees': true,
-                'createOrder': false,
-                'cancelOrder': false,
             },
             'features': {},
+            'options': {
+                'rpcUrl': 'https://api.devnet.solana.com',
+            },
             'timeframes': {
                 '1m': '1m',
                 '3m': '3m',
@@ -154,7 +161,10 @@ export default class fibe extends Exchange {
         const marketTypeRaw = this.safeString(market, 'marketType');
         const isPerp = (marketTypeRaw === 'P');
         const marketIndex = this.safeString(market, 'marketIndex');
-        const idPrefix = isPerp ? 'perp:' : 'spot:';
+        let idPrefix = 'spot:';
+        if (isPerp) {
+            idPrefix = 'perp:';
+        }
         const id = idPrefix + marketIndex;
         let symbol = base + '/' + quote;
         let settle = undefined;
@@ -172,6 +182,14 @@ export default class fibe extends Exchange {
         const amountPrecision = this.parseNumber(Precise.stringMul(this.safeString(market, 'lotSizeInBaseBaseUnits'), this.parsePrecision(this.numberToString(baseDecimals))));
         const pricePrecision = this.parseNumber(Precise.stringMul(this.safeString(market, 'tickSizeInQuoteBaseUnits'), this.parsePrecision(this.numberToString(quoteDecimals))));
         const contract = isPerp;
+        let linear = undefined;
+        let inverse = undefined;
+        let contractSize = undefined;
+        if (isPerp) {
+            linear = true;
+            inverse = false;
+            contractSize = this.parseNumber('1');
+        }
         return this.safeMarketStructure({
             'id': id,
             'symbol': symbol,
@@ -189,9 +207,9 @@ export default class fibe extends Exchange {
             'option': false,
             'active': true,
             'contract': contract,
-            'linear': isPerp ? true : undefined,
-            'inverse': isPerp ? false : undefined,
-            'contractSize': isPerp ? this.parseNumber('1') : undefined,
+            'linear': linear,
+            'inverse': inverse,
+            'contractSize': contractSize,
             // loadMarkets() asserts taker/maker are present; real fees come from /user-fees
             'taker': this.parseNumber('0'),
             'maker': this.parseNumber('0'),
@@ -335,7 +353,10 @@ export default class fibe extends Exchange {
         //     }
         //
         const marketIndex = this.safeString(position, 'marketIndex');
-        const marketId = (marketIndex === undefined) ? undefined : 'perp:' + marketIndex;
+        let marketId = undefined;
+        if (marketIndex !== undefined) {
+            marketId = 'perp:' + marketIndex;
+        }
         market = this.safeMarket(marketId, market);
         const leverage = this.safeDict(position, 'leverage', {});
         const marginMode = this.safeString(leverage, 'type');
@@ -349,7 +370,10 @@ export default class fibe extends Exchange {
         }
         const marginUsed = this.safeString(position, 'marginUsed');
         const returnOnEquity = this.safeString(position, 'returnOnEquity');
-        const percentage = (returnOnEquity === undefined) ? undefined : Precise.stringMul(returnOnEquity, '100');
+        let percentage = undefined;
+        if (returnOnEquity !== undefined) {
+            percentage = Precise.stringMul(returnOnEquity, '100');
+        }
         return this.safePosition({
             'info': position,
             'id': undefined,
@@ -404,9 +428,13 @@ export default class fibe extends Exchange {
         [userAddress, params] = this.handlePublicAddress('fetchFundingHistory', params);
         let until = undefined;
         [until, params] = this.handleOptionAndParams(params, 'fetchFundingHistory', 'until');
+        let startTime = 0;
+        if (since !== undefined) {
+            startTime = this.parseToInt(since / 1000);
+        }
         const request = {
             'user': userAddress,
-            'startTime': (since === undefined) ? 0 : this.parseToInt(since / 1000),
+            'startTime': startTime,
         };
         if (until !== undefined) {
             request['endTime'] = this.parseToInt(until / 1000);
@@ -429,7 +457,10 @@ export default class fibe extends Exchange {
         const marketType = this.safeString(income, 'marketType');
         let marketId = undefined;
         if (marketIndex !== undefined) {
-            const idPrefix = (marketType === 'P') ? 'perp:' : 'spot:';
+            let idPrefix = 'spot:';
+            if (marketType === 'P') {
+                idPrefix = 'perp:';
+            }
             marketId = idPrefix + marketIndex;
         }
         market = this.safeMarket(marketId, market);
@@ -513,7 +544,13 @@ export default class fibe extends Exchange {
         const request = {
             'marketIndex': this.safeString(info, 'marketIndex'),
         };
-        const response = market['spot'] ? await this.publicGetSpotAssetCtx(this.extend(request, params)) : await this.publicGetPerpAssetCtx(this.extend(request, params));
+        let response = undefined;
+        if (market['spot']) {
+            response = await this.publicGetSpotAssetCtx(this.extend(request, params));
+        }
+        else {
+            response = await this.publicGetPerpAssetCtx(this.extend(request, params));
+        }
         return this.parseTicker(response, market);
     }
     async fetchTickers(symbols = undefined, params = {}) {
@@ -691,9 +728,13 @@ export default class fibe extends Exchange {
             // the market tick (precision.price) is the finest valid step.
             priceStep = this.numberToString(market['precision']['price']);
         }
+        let marketType = 'P';
+        if (market['spot']) {
+            marketType = 'S';
+        }
         const request = {
             'marketIndex': this.safeString(info, 'marketIndex'),
-            'marketType': market['spot'] ? 'S' : 'P',
+            'marketType': marketType,
             'priceStep': priceStep,
         };
         const response = await this.publicGetL2book(this.extend(request, params));
@@ -732,9 +773,13 @@ export default class fibe extends Exchange {
         await this.loadMarkets();
         const market = this.market(symbol);
         const info = market['info'];
+        let marketType = 'P';
+        if (market['spot']) {
+            marketType = 'S';
+        }
         const request = {
             'marketIndex': this.safeString(info, 'marketIndex'),
-            'marketType': market['spot'] ? 'S' : 'P',
+            'marketType': marketType,
         };
         const response = await this.publicGetRecentMarketTrades(this.extend(request, params));
         return this.parseTrades(response, market, since, limit);
@@ -788,10 +833,16 @@ export default class fibe extends Exchange {
         const market = this.market(symbol);
         const info = market['info'];
         const duration = this.parseTimeframe(timeframe);
-        const requestLimit = (limit === undefined) ? 100 : limit;
+        let requestLimit = limit;
+        if (requestLimit === undefined) {
+            requestLimit = 100;
+        }
         let until = undefined;
         [until, params] = this.handleOptionAndParams(params, 'fetchOHLCV', 'until');
-        let endTimestamp = (until === undefined) ? this.seconds() : this.parseToInt(until / 1000);
+        let endTimestamp = this.seconds();
+        if (until !== undefined) {
+            endTimestamp = this.parseToInt(until / 1000);
+        }
         let startTimestamp = endTimestamp - (requestLimit * duration);
         if (since !== undefined) {
             startTimestamp = this.parseToInt(since / 1000);
@@ -799,9 +850,13 @@ export default class fibe extends Exchange {
                 endTimestamp = Math.min(startTimestamp + (requestLimit * duration), this.seconds());
             }
         }
+        let marketType = 'P';
+        if (market['spot']) {
+            marketType = 'S';
+        }
         const request = {
             'marketIndex': this.safeString(info, 'marketIndex'),
-            'marketType': market['spot'] ? 'S' : 'P',
+            'marketType': marketType,
             'startTimestamp': startTimestamp,
             'endTimestamp': endTimestamp,
             'interval': this.safeString(this.timeframes, timeframe, timeframe),
@@ -898,6 +953,329 @@ export default class fibe extends Exchange {
         const response = await this.publicGetHistoricalOrders(this.extend(request, params));
         return this.parseOrders(response, market, since, limit);
     }
+    async fetchCreateOrderMarketReferencePrice(market) {
+        const allMids = await this.publicGetAllMids();
+        const marketInfo = market['info'];
+        const marketIndex = this.safeString(marketInfo, 'marketIndex');
+        const marketType = this.safeString(marketInfo, 'marketType');
+        for (let i = 0; i < allMids.length; i++) {
+            const mid = allMids[i];
+            if ((this.safeString(mid, 'marketIndex') === marketIndex) && (this.safeString(mid, 'marketType') === marketType)) {
+                const referencePrice = this.safeString(mid, 'mid');
+                if (referencePrice !== undefined) {
+                    return referencePrice;
+                }
+            }
+        }
+        throw new ExchangeError(this.id + ' createOrder() could not find a mid price for market ' + market['symbol']);
+    }
+    async createOrder(symbol, type, side, amount, price = undefined, params = {}) {
+        /**
+         * @method
+         * @name fibe#createOrder
+         * @description creates a locally-signed Solana transaction and submits it through Solana RPC
+         * @param {string} symbol unified market symbol
+         * @param {string} type order type, "limit" or "market"
+         * @param {string} side "buy" or "sell"
+         * @param {float} amount amount of base currency
+         * @param {float} [price] price in quote currency, required for limit orders; optional reference price for market orders
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.privateKey] 64-byte Solana secret key, base58/hex/json-array encoded
+         * @param {string} [params.user] user address, must match privateKey public key if provided
+         * @param {string} [params.rpcUrl] Solana RPC endpoint
+         * @param {string} [params.orderId] on-chain client order id
+         * @param {string} [params.timeInForce] GTC, IOC, PO, or FOK; market orders always use IOC
+         * @param {number} [params.slippage] market-order slippage fraction, defaults to 0.05
+         * @param {boolean} [params.postOnly] equivalent to timeInForce PO
+         * @param {string} [params.commitment] Solana commitment for account/blockhash RPC calls, defaults to confirmed
+         * @param {string} [params.preflightCommitment] Solana sendTransaction preflight commitment
+         * @param {boolean} [params.skipPreflight] Solana sendTransaction skipPreflight option
+         * @param {int} [params.maxRetries] Solana sendTransaction maxRetries option
+         * @param {int} [params.minContextSlot] Solana sendTransaction minContextSlot option
+         * @param {int} [params.computeUnitLimit] optional Solana compute budget unit limit
+         * @param {string|int} [params.computeUnitPriceMicroLamports] optional Solana compute unit price in micro-lamports
+         * @param {int} [params.subAccountIndex] perp subaccount index, defaults to 0
+         * @param {string} [params.marginMode] perp margin mode, defaults to cross
+         * @param {int} [params.initialLeverage] optional perp initial leverage
+         * @param {boolean} [params.autoTopUpCollateralFromWallet] optional perp collateral top-up flag, defaults to true
+         * @returns {Order} an order structure
+         */
+        const orderType = type.toLowerCase();
+        const isLimitOrder = (orderType === 'limit');
+        const isMarketOrder = (orderType === 'market');
+        if (!isLimitOrder && !isMarketOrder) {
+            throw new InvalidOrder(this.id + ' createOrder() local transaction construction only supports limit and market orders');
+        }
+        if (isLimitOrder && (price === undefined)) {
+            throw new InvalidOrder(this.id + ' createOrder() requires a price for limit orders');
+        }
+        await this.loadMarkets();
+        const market = this.market(symbol);
+        const orderSide = side.toLowerCase();
+        const isBuy = (orderSide === 'buy');
+        if (!isBuy && (orderSide !== 'sell')) {
+            throw new InvalidOrder(this.id + ' createOrder() side must be buy or sell');
+        }
+        let privateKey = undefined;
+        [privateKey, params] = this.handleOptionAndParams(params, 'createOrder', 'privateKey', this.privateKey);
+        if (privateKey !== undefined) {
+            privateKey = privateKey.trim();
+        }
+        if ((privateKey === undefined) || (privateKey === '')) {
+            throw new ArgumentsRequired(this.id + ' createOrder() requires a privateKey parameter or exchange.privateKey');
+        }
+        let user = undefined;
+        [user, params] = this.handlePublicAddress('createOrder', params);
+        let rpcUrl = undefined;
+        [rpcUrl, params] = this.handleOptionAndParams(params, 'createOrder', 'rpcUrl', this.safeString(this.options, 'rpcUrl'));
+        let orderId = undefined;
+        [orderId, params] = this.handleOptionAndParams2(params, 'createOrder', 'orderId', 'clientOrderId');
+        if (orderId === undefined) {
+            orderId = this.fibeNewOrderId();
+        }
+        orderId = this.fibeValidateUnsignedIntegerParam('createOrder', 'orderId', orderId);
+        let postOnly = undefined;
+        [postOnly, params] = this.handlePostOnly(false, false, params);
+        params = this.omit(params, ['postOnly', 'post_only']);
+        let timeInForce = undefined;
+        [timeInForce, params] = this.handleOptionAndParams(params, 'createOrder', 'timeInForce');
+        if (isMarketOrder) {
+            if (postOnly) {
+                throw new InvalidOrder(this.id + ' createOrder() market orders cannot be postOnly');
+            }
+            let upperTimeInForce = undefined;
+            if (timeInForce !== undefined) {
+                upperTimeInForce = this.numberToString(timeInForce).toUpperCase();
+            }
+            if ((upperTimeInForce !== undefined) && (upperTimeInForce !== 'IOC')) {
+                throw new InvalidOrder(this.id + ' createOrder() market orders require timeInForce IOC');
+            }
+            timeInForce = 'IOC';
+        }
+        const fibeTimeInForce = this.encodeCreateOrderTimeInForce(timeInForce, postOnly);
+        let slippage = undefined;
+        [slippage, params] = this.handleOptionAndParams(params, 'createOrder', 'slippage');
+        if (isLimitOrder && (slippage !== undefined)) {
+            throw new InvalidOrder(this.id + ' createOrder() slippage is only supported for market orders');
+        }
+        if (isMarketOrder) {
+            if (slippage === undefined) {
+                slippage = 0.05;
+            }
+            slippage = this.parseNumber(this.numberToString(slippage));
+            if ((slippage === undefined) || !(slippage >= 0) || (slippage >= 1)) {
+                throw new InvalidOrder(this.id + ' createOrder() slippage must be >= 0 and < 1');
+            }
+        }
+        let subAccountIndex = undefined;
+        [subAccountIndex, params] = this.handleOptionAndParams(params, 'createOrder', 'subAccountIndex', 0);
+        subAccountIndex = this.fibeValidateU8Param('createOrder', 'subAccountIndex', subAccountIndex);
+        let marginMode = undefined;
+        [marginMode, params] = this.handleOptionAndParams(params, 'createOrder', 'marginMode', 'cross');
+        marginMode = this.fibeNormalizeMarginMode('createOrder', marginMode);
+        let initialLeverage = undefined;
+        [initialLeverage, params] = this.handleOptionAndParams(params, 'createOrder', 'initialLeverage');
+        if (initialLeverage !== undefined) {
+            initialLeverage = this.fibeValidateU8Param('createOrder', 'initialLeverage', initialLeverage, 1);
+        }
+        let autoTopUpCollateralFromWallet = undefined;
+        [autoTopUpCollateralFromWallet, params] = this.handleOptionAndParams(params, 'createOrder', 'autoTopUpCollateralFromWallet', true);
+        let commitment = undefined;
+        [commitment, params] = this.handleOptionAndParams(params, 'createOrder', 'commitment', this.safeString(this.options, 'commitment', 'confirmed'));
+        let preflightCommitment = undefined;
+        [preflightCommitment, params] = this.handleOptionAndParams(params, 'createOrder', 'preflightCommitment');
+        let skipPreflight = undefined;
+        [skipPreflight, params] = this.handleOptionAndParams(params, 'createOrder', 'skipPreflight');
+        let maxRetries = undefined;
+        [maxRetries, params] = this.handleOptionAndParams(params, 'createOrder', 'maxRetries');
+        let minContextSlot = undefined;
+        [minContextSlot, params] = this.handleOptionAndParams(params, 'createOrder', 'minContextSlot');
+        let computeUnitLimit = undefined;
+        [computeUnitLimit, params] = this.handleOptionAndParams(params, 'createOrder', 'computeUnitLimit');
+        if (computeUnitLimit !== undefined) {
+            computeUnitLimit = this.fibeValidateU32Param('createOrder', 'computeUnitLimit', computeUnitLimit);
+        }
+        let computeUnitPriceMicroLamports = undefined;
+        [computeUnitPriceMicroLamports, params] = this.handleOptionAndParams(params, 'createOrder', 'computeUnitPriceMicroLamports');
+        if (computeUnitPriceMicroLamports !== undefined) {
+            computeUnitPriceMicroLamports = this.fibeValidateUnsignedIntegerParam('createOrder', 'computeUnitPriceMicroLamports', computeUnitPriceMicroLamports);
+        }
+        if (!this.isEmpty(params)) {
+            throw new ExchangeError(this.id + ' createOrder() local transaction construction does not support extra params');
+        }
+        const amountString = this.amountToPrecision(symbol, amount);
+        if (!Precise.stringGt(amountString, '0')) {
+            throw new InvalidOrder(this.id + ' createOrder() amount must be greater than zero');
+        }
+        let priceString = undefined;
+        if (price !== undefined) {
+            priceString = this.numberToString(price);
+        }
+        else if (isMarketOrder) {
+            priceString = await this.fetchCreateOrderMarketReferencePrice(market);
+        }
+        if (!Precise.stringGt(priceString, '0')) {
+            throw new InvalidOrder(this.id + ' createOrder() price must be greater than zero');
+        }
+        let fibeSide = 'A';
+        if (isBuy) {
+            fibeSide = 'B';
+        }
+        const result = await this.fibeLocalTxCreateOrder({
+            'rpcUrl': rpcUrl,
+            'market': market,
+            'user': user,
+            'privateKey': privateKey,
+            'orderId': orderId,
+            'side': fibeSide,
+            'amount': amountString,
+            'price': priceString,
+            'slippage': slippage,
+            'timeInForce': fibeTimeInForce,
+            'commitment': commitment,
+            'preflightCommitment': preflightCommitment,
+            'skipPreflight': skipPreflight,
+            'maxRetries': maxRetries,
+            'minContextSlot': minContextSlot,
+            'computeUnitLimit': computeUnitLimit,
+            'computeUnitPriceMicroLamports': computeUnitPriceMicroLamports,
+            'subAccountIndex': subAccountIndex,
+            'marginMode': marginMode,
+            'initialLeverage': initialLeverage,
+            'autoTopUpCollateralFromWallet': autoTopUpCollateralFromWallet,
+        });
+        return this.safeOrder({
+            'info': result,
+            'id': orderId,
+            'clientOrderId': orderId,
+            'timestamp': undefined,
+            'datetime': undefined,
+            'lastTradeTimestamp': undefined,
+            'lastUpdateTimestamp': undefined,
+            'symbol': symbol,
+            'type': orderType,
+            'timeInForce': this.parseOrderTimeInForce(fibeTimeInForce),
+            'postOnly': (fibeTimeInForce === 'PostOnly'),
+            'reduceOnly': undefined,
+            'side': orderSide,
+            'price': isLimitOrder ? priceString : undefined,
+            'triggerPrice': undefined,
+            'amount': amountString,
+            'cost': undefined,
+            'average': undefined,
+            'filled': undefined,
+            'remaining': undefined,
+            'status': undefined,
+            'fee': undefined,
+            'trades': undefined,
+        }, market);
+    }
+    async cancelOrder(id, symbol = undefined, params = {}) {
+        /**
+         * @method
+         * @name fibe#cancelOrder
+         * @description creates a locally-signed Solana cancellation transaction and submits it through Solana RPC
+         * @param {string} id order id
+         * @param {string} symbol unified market symbol
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.privateKey] 64-byte Solana secret key, base58/hex/json-array encoded
+         * @param {string} [params.user] user address, must match privateKey public key if provided
+         * @param {string} [params.rpcUrl] Solana RPC endpoint
+         * @param {string} [params.commitment] Solana commitment for account/blockhash RPC calls, defaults to confirmed
+         * @param {string} [params.preflightCommitment] Solana sendTransaction preflight commitment
+         * @param {boolean} [params.skipPreflight] Solana sendTransaction skipPreflight option
+         * @param {int} [params.maxRetries] Solana sendTransaction maxRetries option
+         * @param {int} [params.minContextSlot] Solana sendTransaction minContextSlot option
+         * @param {int} [params.computeUnitLimit] optional Solana compute budget unit limit
+         * @param {string|int} [params.computeUnitPriceMicroLamports] optional Solana compute unit price in micro-lamports
+         * @param {int} [params.subAccountIndex] perp subaccount index, defaults to 0
+         * @returns {Order} an order structure
+         */
+        if (symbol === undefined) {
+            throw new ArgumentsRequired(this.id + ' cancelOrder() requires a symbol for local tx construction');
+        }
+        id = this.fibeValidateUnsignedIntegerParam('cancelOrder', 'id', id);
+        await this.loadMarkets();
+        const market = this.market(symbol);
+        let privateKey = undefined;
+        [privateKey, params] = this.handleOptionAndParams(params, 'cancelOrder', 'privateKey', this.privateKey);
+        if (privateKey !== undefined) {
+            privateKey = privateKey.trim();
+        }
+        if ((privateKey === undefined) || (privateKey === '')) {
+            throw new ArgumentsRequired(this.id + ' cancelOrder() requires a privateKey parameter or exchange.privateKey');
+        }
+        let user = undefined;
+        [user, params] = this.handlePublicAddress('cancelOrder', params);
+        let rpcUrl = undefined;
+        [rpcUrl, params] = this.handleOptionAndParams(params, 'cancelOrder', 'rpcUrl', this.safeString(this.options, 'rpcUrl'));
+        let subAccountIndex = undefined;
+        [subAccountIndex, params] = this.handleOptionAndParams(params, 'cancelOrder', 'subAccountIndex', 0);
+        subAccountIndex = this.fibeValidateU8Param('cancelOrder', 'subAccountIndex', subAccountIndex);
+        let commitment = undefined;
+        [commitment, params] = this.handleOptionAndParams(params, 'cancelOrder', 'commitment', this.safeString(this.options, 'commitment', 'confirmed'));
+        let preflightCommitment = undefined;
+        [preflightCommitment, params] = this.handleOptionAndParams(params, 'cancelOrder', 'preflightCommitment');
+        let skipPreflight = undefined;
+        [skipPreflight, params] = this.handleOptionAndParams(params, 'cancelOrder', 'skipPreflight');
+        let maxRetries = undefined;
+        [maxRetries, params] = this.handleOptionAndParams(params, 'cancelOrder', 'maxRetries');
+        let minContextSlot = undefined;
+        [minContextSlot, params] = this.handleOptionAndParams(params, 'cancelOrder', 'minContextSlot');
+        let computeUnitLimit = undefined;
+        [computeUnitLimit, params] = this.handleOptionAndParams(params, 'cancelOrder', 'computeUnitLimit');
+        if (computeUnitLimit !== undefined) {
+            computeUnitLimit = this.fibeValidateU32Param('cancelOrder', 'computeUnitLimit', computeUnitLimit);
+        }
+        let computeUnitPriceMicroLamports = undefined;
+        [computeUnitPriceMicroLamports, params] = this.handleOptionAndParams(params, 'cancelOrder', 'computeUnitPriceMicroLamports');
+        if (computeUnitPriceMicroLamports !== undefined) {
+            computeUnitPriceMicroLamports = this.fibeValidateUnsignedIntegerParam('cancelOrder', 'computeUnitPriceMicroLamports', computeUnitPriceMicroLamports);
+        }
+        if (!this.isEmpty(params)) {
+            throw new ExchangeError(this.id + ' cancelOrder() local transaction construction does not support extra params');
+        }
+        const result = await this.fibeLocalTxCancelOrder({
+            'rpcUrl': rpcUrl,
+            'market': market,
+            'user': user,
+            'privateKey': privateKey,
+            'orderId': id,
+            'subAccountIndex': subAccountIndex,
+            'commitment': commitment,
+            'preflightCommitment': preflightCommitment,
+            'skipPreflight': skipPreflight,
+            'maxRetries': maxRetries,
+            'minContextSlot': minContextSlot,
+            'computeUnitLimit': computeUnitLimit,
+            'computeUnitPriceMicroLamports': computeUnitPriceMicroLamports,
+        });
+        return this.safeOrder({
+            'info': result,
+            'id': id,
+            'clientOrderId': id,
+            'timestamp': undefined,
+            'datetime': undefined,
+            'lastTradeTimestamp': undefined,
+            'lastUpdateTimestamp': undefined,
+            'symbol': symbol,
+            'type': undefined,
+            'timeInForce': undefined,
+            'postOnly': undefined,
+            'reduceOnly': undefined,
+            'side': undefined,
+            'price': undefined,
+            'triggerPrice': undefined,
+            'amount': undefined,
+            'cost': undefined,
+            'average': undefined,
+            'filled': undefined,
+            'remaining': undefined,
+            'status': 'canceled',
+            'fee': undefined,
+            'trades': undefined,
+        }, market);
+    }
     parseOrder(order, market = undefined) {
         //
         //     {
@@ -920,7 +1298,10 @@ export default class fibe extends Exchange {
         const marketType = this.safeString(order, 'marketType');
         let marketId = undefined;
         if (marketIndex !== undefined) {
-            const idPrefix = (marketType === 'P') ? 'perp:' : 'spot:';
+            let idPrefix = 'spot:';
+            if (marketType === 'P') {
+                idPrefix = 'perp:';
+            }
             marketId = idPrefix + marketIndex;
         }
         market = this.safeMarket(marketId, market);
@@ -963,6 +1344,1731 @@ export default class fibe extends Exchange {
             'trades': undefined,
         }, market);
     }
+    fibeProgramId() {
+        return 'G691tDoMnLq8Vvebbv8JqkeUkzpzBWWzxfqFcHeBh7t6';
+    }
+    solanaSystemProgramId() {
+        return '11111111111111111111111111111111';
+    }
+    solanaAssociatedTokenProgramId() {
+        return 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+    }
+    solanaComputeBudgetProgramId() {
+        return 'ComputeBudget111111111111111111111111111111';
+    }
+    solanaNativeMint() {
+        return 'So11111111111111111111111111111111111111112';
+    }
+    solanaHexAlphabet() {
+        return '0123456789abcdef';
+    }
+    solanaHexNibble(value) {
+        const lower = this.solanaHexAlphabet();
+        const upper = '0123456789ABCDEF';
+        for (let i = 0; i < 16; i++) {
+            if ((value === lower[i]) || (value === upper[i])) {
+                return i;
+            }
+        }
+        throw new ExchangeError(this.id + ' invalid hex character ' + value);
+    }
+    solanaHexByte(hex, index) {
+        const hi = this.solanaHexNibble(hex[index]);
+        const lo = this.solanaHexNibble(hex[index + 1]);
+        return (hi * 16) + lo;
+    }
+    fibeIsUnsignedIntegerString(value) {
+        if (value == undefined) {
+            return false;
+        }
+        const stringValue = this.numberToString(value);
+        if (stringValue === '') {
+            return false;
+        }
+        for (let i = 0; i < stringValue.length; i++) {
+            const character = stringValue[i];
+            if ((character < '0') || (character > '9')) {
+                return false;
+            }
+        }
+        return true;
+    }
+    fibeValidateUnsignedIntegerParam(method, field, value) {
+        const stringValue = this.numberToString(value);
+        if (!this.fibeIsUnsignedIntegerString(stringValue)) {
+            throw new InvalidOrder(this.id + ' ' + method + '() ' + field + ' must be an unsigned integer');
+        }
+        return stringValue;
+    }
+    fibeValidateU8Param(method, field, value, min = 0) {
+        const stringValue = this.fibeValidateUnsignedIntegerParam(method, field, value);
+        const numeric = parseInt(stringValue);
+        if ((numeric < min) || (numeric > 255)) {
+            throw new InvalidOrder(this.id + ' ' + method + '() ' + field + ' must be between ' + this.numberToString(min) + ' and 255');
+        }
+        return numeric;
+    }
+    fibeValidateU32Param(method, field, value) {
+        const stringValue = this.fibeValidateUnsignedIntegerParam(method, field, value);
+        const numeric = parseInt(stringValue);
+        if (numeric > 4294967295) {
+            throw new InvalidOrder(this.id + ' ' + method + '() ' + field + ' must be between 0 and 4294967295');
+        }
+        return numeric;
+    }
+    fibeNormalizeMarginMode(method, marginMode) {
+        const normalized = this.numberToString(marginMode).toLowerCase();
+        if ((normalized !== 'cross') && (normalized !== 'isolated')) {
+            throw new InvalidOrder(this.id + ' ' + method + '() marginMode must be cross or isolated');
+        }
+        return normalized;
+    }
+    solanaU8Hex(value) {
+        const stringValue = this.numberToString(value);
+        if (!this.fibeIsUnsignedIntegerString(stringValue)) {
+            throw new ExchangeError(this.id + ' invalid u8 value ' + stringValue);
+        }
+        const numeric = parseInt(stringValue);
+        if (numeric > 255) {
+            throw new ExchangeError(this.id + ' u8 overflow');
+        }
+        const alphabet = this.solanaHexAlphabet();
+        const hi = this.parseToInt(numeric / 16);
+        const lo = numeric - (hi * 16);
+        return alphabet[hi] + alphabet[lo];
+    }
+    solanaU16leHex(value) {
+        const numeric = this.parseToInt(value);
+        const lo = numeric % 256;
+        const hi = this.parseToInt(numeric / 256);
+        return this.solanaU8Hex(lo) + this.solanaU8Hex(hi);
+    }
+    solanaU32leHex(value) {
+        const stringValue = this.numberToString(value);
+        if (!this.fibeIsUnsignedIntegerString(stringValue)) {
+            throw new ExchangeError(this.id + ' invalid u32 value ' + stringValue);
+        }
+        let remaining = parseInt(stringValue);
+        let result = '';
+        for (let i = 0; i < 4; i++) {
+            const byteValue = remaining % 256;
+            result += this.solanaU8Hex(byteValue);
+            remaining = this.parseToInt(remaining / 256);
+        }
+        if (remaining !== 0) {
+            throw new ExchangeError(this.id + ' u32 overflow');
+        }
+        return result;
+    }
+    solanaBytesHex(values) {
+        let result = '';
+        for (let i = 0; i < values.length; i++) {
+            result += this.solanaU8Hex(values[i]);
+        }
+        return result;
+    }
+    solanaStringHex(value) {
+        return this.binaryToBase16(this.encode(value));
+    }
+    solanaPubkeyHex(pubkey) {
+        const decoded = this.base58ToBinary(pubkey);
+        const result = this.binaryToBase16(decoded);
+        if (result.length !== 64) {
+            throw new ExchangeError(this.id + ' invalid Solana address ' + pubkey);
+        }
+        return result;
+    }
+    fibeDecimalStringStripZeros(value) {
+        let result = value;
+        while ((result.length > 1) && (result[0] === '0')) {
+            result = result.slice(1);
+        }
+        if (result === '') {
+            return '0';
+        }
+        return result;
+    }
+    fibeDecimalStringDivInteger(value, divisor, roundUp = false) {
+        const parts = value.split('.');
+        const whole = this.fibeDecimalStringStripZeros(this.safeString(parts, 0, '0'));
+        const fraction = this.safeString(parts, 1, '');
+        const division = this.fibeDecimalStringDivmod(whole, divisor);
+        let quotient = this.safeString(division, 'quotient');
+        const remainder = this.safeInteger(division, 'remainder', 0);
+        if (!roundUp) {
+            return quotient;
+        }
+        if (remainder > 0) {
+            return this.fibeDecimalStringAddSmall(quotient, 1);
+        }
+        for (let i = 0; i < fraction.length; i++) {
+            if (fraction[i] !== '0') {
+                return this.fibeDecimalStringAddSmall(quotient, 1);
+            }
+        }
+        return quotient;
+    }
+    fibeDecimalStringDivmod(value, divisor) {
+        let quotient = '';
+        let remainder = 0;
+        const normalized = this.fibeDecimalStringStripZeros(value);
+        let i = 0;
+        while (i < normalized.length) {
+            const digit = parseInt(normalized[i]);
+            const current = this.sum(remainder * 10, digit);
+            const q = this.parseToInt(current / divisor);
+            remainder = current - (q * divisor);
+            if ((quotient !== '') || (q !== 0)) {
+                quotient += this.numberToString(q);
+            }
+            i = i + 1;
+        }
+        if (quotient === '') {
+            quotient = '0';
+        }
+        return {
+            'quotient': quotient,
+            'remainder': remainder,
+        };
+    }
+    fibeDecimalStringCompare(a, b) {
+        const left = this.fibeDecimalStringStripZeros(a);
+        const right = this.fibeDecimalStringStripZeros(b);
+        if (left.length > right.length) {
+            return 1;
+        }
+        if (left.length < right.length) {
+            return -1;
+        }
+        if (left > right) {
+            return 1;
+        }
+        if (left < right) {
+            return -1;
+        }
+        return 0;
+    }
+    fibeDecimalStringAdd(a, b) {
+        let result = '';
+        let carry = 0;
+        let i = a.length - 1;
+        let j = b.length - 1;
+        while ((i >= 0) || (j >= 0) || (carry > 0)) {
+            const left = (i >= 0) ? parseInt(a[i]) : 0;
+            const right = (j >= 0) ? parseInt(b[j]) : 0;
+            const sum = this.sum(left, right, carry);
+            result = this.numberToString(sum % 10) + result;
+            carry = this.parseToInt(sum / 10);
+            i = i - 1;
+            j = j - 1;
+        }
+        return this.fibeDecimalStringStripZeros(result);
+    }
+    fibeDecimalStringSubtract(a, b) {
+        if (this.fibeDecimalStringCompare(a, b) < 0) {
+            throw new ExchangeError(this.id + ' decimal subtraction underflow');
+        }
+        let result = '';
+        let borrow = 0;
+        let i = a.length - 1;
+        let j = b.length - 1;
+        while (i >= 0) {
+            const left = parseInt(a[i]);
+            const right = (j >= 0) ? parseInt(b[j]) : 0;
+            let digit = left - right - borrow;
+            if (digit < 0) {
+                digit += 10;
+                borrow = 1;
+            }
+            else {
+                borrow = 0;
+            }
+            result = this.numberToString(digit) + result;
+            i = i - 1;
+            j = j - 1;
+        }
+        return this.fibeDecimalStringStripZeros(result);
+    }
+    fibeDecimalStringSubtractSmall(value, subtraction) {
+        let result = '';
+        let borrow = subtraction;
+        let i = value.length - 1;
+        while (i >= 0) {
+            const digit = parseInt(value[i]);
+            const sub = borrow % 10;
+            borrow = this.parseToInt(borrow / 10);
+            let output = digit - sub;
+            if (output < 0) {
+                output += 10;
+                borrow += 1;
+            }
+            result = this.numberToString(output) + result;
+            i = i - 1;
+        }
+        if (borrow > 0) {
+            throw new ExchangeError(this.id + ' decimal subtraction underflow');
+        }
+        return this.fibeDecimalStringStripZeros(result);
+    }
+    fibeDecimalStringCeilDivSmall(value, divisor) {
+        const division = this.fibeDecimalStringDivmod(value, divisor);
+        let quotient = this.safeString(division, 'quotient');
+        const remainder = this.safeInteger(division, 'remainder', 0);
+        if (remainder > 0) {
+            quotient = this.fibeDecimalStringAddSmall(quotient, 1);
+        }
+        return quotient;
+    }
+    fibeDecimalStringMultiplySmall(value, multiplier) {
+        let result = '';
+        let carry = 0;
+        const normalized = this.fibeDecimalStringStripZeros(value);
+        let i = normalized.length - 1;
+        while (i >= 0) {
+            const digit = parseInt(normalized[i]);
+            const current = this.sum(digit * multiplier, carry);
+            const output = current % 10;
+            carry = this.parseToInt(current / 10);
+            result = this.numberToString(output) + result;
+            i = i - 1;
+        }
+        if (carry > 0) {
+            result = this.numberToString(carry) + result;
+        }
+        return this.fibeDecimalStringStripZeros(result);
+    }
+    fibeDecimalStringAddSmall(value, addition) {
+        let result = '';
+        let carry = addition;
+        const normalized = this.fibeDecimalStringStripZeros(value);
+        let i = normalized.length - 1;
+        while (i >= 0) {
+            const digit = parseInt(normalized[i]);
+            const current = this.sum(digit, carry % 10);
+            carry = this.parseToInt(carry / 10);
+            if (current >= 10) {
+                result = this.numberToString(current - 10) + result;
+                carry += 1;
+            }
+            else {
+                result = this.numberToString(current) + result;
+            }
+            i = i - 1;
+        }
+        if (carry > 0) {
+            result = this.numberToString(carry) + result;
+        }
+        return this.fibeDecimalStringStripZeros(result);
+    }
+    fibeDecimalToUnits(value, decimals) {
+        const normalized = value.trim();
+        const parts = normalized.split('.');
+        let whole = this.safeString(parts, 0, '0');
+        let fraction = this.safeString(parts, 1, '');
+        while (fraction.length < decimals) {
+            fraction += '0';
+        }
+        if (fraction.length > decimals) {
+            fraction = fraction.slice(0, decimals);
+        }
+        whole = this.fibeDecimalStringStripZeros(whole);
+        return this.fibeDecimalStringStripZeros(whole + fraction);
+    }
+    fibeNewOrderId() {
+        const randomHex = this.randomBytes(8);
+        let result = '0';
+        let i = 0;
+        while (i < randomHex.length) {
+            const byteValue = this.solanaHexByte(randomHex, i);
+            result = this.fibeDecimalStringMultiplySmall(result, 256);
+            result = this.fibeDecimalStringAddSmall(result, byteValue);
+            i = i + 2;
+        }
+        return this.fibeDecimalStringStripZeros(result);
+    }
+    fibeNormalizeQuantity(quantity, lotSize) {
+        const lotSizeNumber = parseInt(lotSize);
+        const division = this.fibeDecimalStringDivmod(quantity, lotSizeNumber);
+        const remainder = this.safeInteger(division, 'remainder', 0);
+        if (remainder === 0) {
+            return this.fibeDecimalStringStripZeros(quantity);
+        }
+        return this.fibeDecimalStringSubtractSmall(quantity, remainder);
+    }
+    solanaU64leHex(value) {
+        const stringValue = this.numberToString(value);
+        if (!this.fibeIsUnsignedIntegerString(stringValue)) {
+            throw new ExchangeError(this.id + ' invalid u64 value ' + stringValue);
+        }
+        let remaining = this.fibeDecimalStringStripZeros(stringValue);
+        let result = '';
+        for (let i = 0; i < 8; i++) {
+            const division = this.fibeDecimalStringDivmod(remaining, 256);
+            result += this.solanaU8Hex(this.safeInteger(division, 'remainder'));
+            remaining = this.safeString(division, 'quotient');
+        }
+        if (remaining !== '0') {
+            throw new ExchangeError(this.id + ' u64 overflow');
+        }
+        return result;
+    }
+    solanaLeHexToDecimalString(hex) {
+        let result = '0';
+        let i = hex.length - 2;
+        while (i >= 0) {
+            const byteValue = this.solanaHexByte(hex, i);
+            result = this.fibeDecimalStringMultiplySmall(result, 256);
+            result = this.fibeDecimalStringAddSmall(result, byteValue);
+            i = i - 2;
+        }
+        return this.fibeDecimalStringStripZeros(result);
+    }
+    solanaOptionU8Hex(value) {
+        if (value === undefined) {
+            return this.solanaU8Hex(0);
+        }
+        return this.solanaU8Hex(1) + this.solanaU8Hex(value);
+    }
+    solanaOptionU16Hex(value) {
+        if (value === undefined) {
+            return this.solanaU8Hex(0);
+        }
+        return this.solanaU8Hex(1) + this.solanaU16leHex(value);
+    }
+    solanaOptionU64Hex(value) {
+        if (value === undefined) {
+            return this.solanaU8Hex(0);
+        }
+        return this.solanaU8Hex(1) + this.solanaU64leHex(value);
+    }
+    solanaShortVecHex(value) {
+        let result = '';
+        let remaining = value;
+        let shouldContinue = true;
+        while (shouldContinue === true) {
+            let elem = remaining % 128;
+            remaining = this.parseToInt(remaining / 128);
+            if (remaining === 0) {
+                shouldContinue = false;
+            }
+            else {
+                elem += 128;
+            }
+            result += this.solanaU8Hex(elem);
+        }
+        return result;
+    }
+    fibeSideIndex(side) {
+        if (side === 'B') {
+            return 0;
+        }
+        return 1;
+    }
+    fibeTimeInForceIndex(timeInForce) {
+        const values = {
+            'Gtc': 0,
+            'Ioc': 1,
+            'PostOnly': 2,
+            'Fok': 3,
+        };
+        return this.safeInteger(values, timeInForce);
+    }
+    fibeGetTickArrayStartTick(priceInTicks) {
+        const numeric = parseInt(priceInTicks);
+        return this.numberToString(numeric - (numeric % 100));
+    }
+    fibePriceToTicks(price, quoteDecimals, tickSizeInQuoteBaseUnits, side = undefined, slippage = undefined) {
+        let adjustedPrice = this.numberToString(price);
+        if (slippage !== undefined) {
+            let factor = Precise.stringSub('1', this.numberToString(slippage));
+            if (side === 'B') {
+                factor = Precise.stringAdd('1', this.numberToString(slippage));
+            }
+            adjustedPrice = Precise.stringMul(adjustedPrice, factor);
+        }
+        let scale = '1';
+        for (let i = 0; i < quoteDecimals; i++) {
+            scale += '0';
+        }
+        const scaled = Precise.stringMul(adjustedPrice, scale);
+        return this.fibeDecimalStringDivInteger(scaled, parseInt(tickSizeInQuoteBaseUnits), side !== 'B');
+    }
+    solanaIsHexString(value) {
+        if (value === '') {
+            return false;
+        }
+        for (let i = 0; i < value.length; i++) {
+            const character = value[i];
+            const isDigit = (character >= '0') && (character <= '9');
+            const isLower = (character >= 'a') && (character <= 'f');
+            const isUpper = (character >= 'A') && (character <= 'F');
+            if (!isDigit && !isLower && !isUpper) {
+                return false;
+            }
+        }
+        return true;
+    }
+    solanaPublicKeyFromSecretKeyHex(secretKeyHex) {
+        if (secretKeyHex.length !== 128) {
+            throw new ExchangeError(this.id + ' invalid Solana secret key length ' + this.numberToString(secretKeyHex.length / 2));
+        }
+        return this.binaryToBase58(this.base16ToBinary(secretKeyHex.slice(64, 128)));
+    }
+    solanaParsePrivateKeyHex(privateKey, user = undefined) {
+        if (privateKey === undefined) {
+            throw new ArgumentsRequired(this.id + ' requires a 64-byte Solana secret key');
+        }
+        privateKey = this.numberToString(privateKey).trim();
+        if (privateKey === '') {
+            throw new ArgumentsRequired(this.id + ' requires a 64-byte Solana secret key');
+        }
+        let rawHex = undefined;
+        if (privateKey.indexOf('[') === 0) {
+            const raw = this.parseJson(privateKey);
+            if (!Array.isArray(raw)) {
+                throw new ExchangeError(this.id + ' Solana secret key JSON must be an array of bytes');
+            }
+            for (let i = 0; i < raw.length; i++) {
+                if (!this.fibeIsUnsignedIntegerString(raw[i])) {
+                    throw new ExchangeError(this.id + ' invalid Solana private key byte at index ' + this.numberToString(i));
+                }
+                const byteValueString = this.numberToString(raw[i]);
+                const byteValue = parseInt(byteValueString);
+                if ((byteValue < 0) || (byteValue > 255)) {
+                    throw new ExchangeError(this.id + ' invalid Solana private key byte at index ' + this.numberToString(i));
+                }
+            }
+            rawHex = this.solanaBytesHex(raw);
+        }
+        else {
+            let candidate = privateKey;
+            if (privateKey.indexOf('0x') === 0) {
+                candidate = privateKey.slice(2);
+            }
+            if (this.solanaIsHexString(candidate)) {
+                rawHex = candidate.toLowerCase();
+            }
+            else {
+                rawHex = this.binaryToBase16(this.base58ToBinary(privateKey));
+            }
+        }
+        if (rawHex.length !== 128) {
+            throw new ExchangeError(this.id + ' invalid Solana secret key length ' + this.numberToString(rawHex.length / 2) + ', expected 64 bytes');
+        }
+        const publicKey = this.solanaPublicKeyFromSecretKeyHex(rawHex);
+        if (user !== undefined) {
+            if (publicKey !== user) {
+                throw new AuthenticationError(this.id + ' credential does not match address ' + user);
+            }
+        }
+        return rawHex.slice(0, 64);
+    }
+    solanaFieldP() {
+        return [65517, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 32767];
+    }
+    solanaFieldD() {
+        return [30883, 4953, 19914, 30187, 55467, 16705, 2637, 112, 59544, 30585, 16505, 36039, 65139, 11119, 27886, 20995];
+    }
+    solanaFieldOne() {
+        return [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    }
+    solanaFieldCompare(a, b) {
+        let i = 15;
+        while (i >= 0) {
+            const ai = this.safeInteger(a, i, 0);
+            const bi = this.safeInteger(b, i, 0);
+            if (ai > bi) {
+                return 1;
+            }
+            if (ai < bi) {
+                return -1;
+            }
+            i = i - 1;
+        }
+        return 0;
+    }
+    solanaFieldNormalize(input) {
+        const result = [];
+        for (let i = 0; i < 32; i++) {
+            result.push(this.safeInteger(input, i, 0));
+        }
+        for (let carryPass = 0; carryPass < 3; carryPass++) {
+            for (let i = 0; i < 31; i++) {
+                const carry = this.parseToInt(result[i] / 65536);
+                result[i] = result[i] - (carry * 65536);
+                result[i + 1] = this.sum(result[i + 1], carry);
+            }
+            let highIndex = 31;
+            while (highIndex >= 16) {
+                if (result[highIndex] !== 0) {
+                    result[highIndex - 16] = this.sum(result[highIndex - 16], result[highIndex] * 38);
+                    result[highIndex] = 0;
+                }
+                highIndex = highIndex - 1;
+            }
+            const highCarry = this.parseToInt(result[15] / 32768);
+            if (highCarry > 0) {
+                result[15] = result[15] - (highCarry * 32768);
+                result[0] = this.sum(result[0], highCarry * 19);
+            }
+        }
+        const out = [];
+        for (let i = 0; i < 16; i++) {
+            out.push(result[i]);
+        }
+        const p = this.solanaFieldP();
+        for (let reductionPass = 0; reductionPass < 20; reductionPass++) {
+            if (this.solanaFieldCompare(out, p) >= 0) {
+                const reduced = this.solanaFieldSubNoNormalize(out, p);
+                for (let i = 0; i < 16; i++) {
+                    out[i] = reduced[i];
+                }
+            }
+        }
+        return out;
+    }
+    solanaFieldSubNoNormalize(a, b) {
+        const result = [];
+        let borrow = 0;
+        for (let i = 0; i < 16; i++) {
+            let value = this.safeInteger(a, i, 0) - this.safeInteger(b, i, 0) - borrow;
+            if (value < 0) {
+                value += 65536;
+                borrow = 1;
+            }
+            else {
+                borrow = 0;
+            }
+            result.push(value);
+        }
+        return result;
+    }
+    solanaFieldSub(a, b) {
+        const p = this.solanaFieldP();
+        const result = [];
+        let borrow = 0;
+        for (let i = 0; i < 16; i++) {
+            const left = this.sum(this.safeInteger(a, i, 0), p[i]);
+            let value = left - this.safeInteger(b, i, 0) - borrow;
+            if (value < 0) {
+                value += 65536;
+                borrow = 1;
+            }
+            else {
+                borrow = 0;
+            }
+            result.push(value);
+        }
+        return this.solanaFieldNormalize(result);
+    }
+    solanaFieldAdd(a, b) {
+        const result = [];
+        for (let i = 0; i < 16; i++) {
+            result.push(this.sum(this.safeInteger(a, i, 0), this.safeInteger(b, i, 0)));
+        }
+        return this.solanaFieldNormalize(result);
+    }
+    solanaFieldMul(a, b) {
+        const result = [];
+        for (let i = 0; i < 32; i++) {
+            result.push(0);
+        }
+        for (let i = 0; i < 16; i++) {
+            for (let j = 0; j < 16; j++) {
+                const index = this.sum(i, j);
+                result[index] = this.sum(result[index], this.safeInteger(a, i, 0) * this.safeInteger(b, j, 0));
+            }
+        }
+        return this.solanaFieldNormalize(result);
+    }
+    solanaFieldSquare(a) {
+        return this.solanaFieldMul(a, a);
+    }
+    solanaFieldPow(a, exponentHex) {
+        let result = this.solanaFieldOne();
+        let i = 0;
+        while (i < exponentHex.length) {
+            const nibble = this.solanaHexNibble(exponentHex[i]);
+            for (let bitOffset = 0; bitOffset < 4; bitOffset++) {
+                const bit = 3 - bitOffset;
+                result = this.solanaFieldSquare(result);
+                const divisor = Math.pow(2, bit);
+                const shifted = this.parseToInt(nibble / divisor);
+                const bitSet = shifted % 2;
+                if (bitSet === 1) {
+                    result = this.solanaFieldMul(result, a);
+                }
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+    solanaFieldIsZero(a) {
+        for (let i = 0; i < 16; i++) {
+            if (this.safeInteger(a, i, 0) !== 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+    solanaFieldIsOne(a) {
+        if (this.safeInteger(a, 0, 0) !== 1) {
+            return false;
+        }
+        for (let i = 1; i < 16; i++) {
+            if (this.safeInteger(a, i, 0) !== 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+    solanaFieldFromLittleEndianHex(hex) {
+        const result = [];
+        for (let i = 0; i < 16; i++) {
+            const offset = i * 4;
+            const b0 = this.solanaHexByte(hex, offset);
+            const b1 = this.solanaHexByte(hex, offset + 2);
+            result.push(b0 + (b1 * 256));
+        }
+        return this.solanaFieldNormalize(result);
+    }
+    solanaIsOnCurveHex(candidateHex) {
+        if (candidateHex.length !== 64) {
+            return false;
+        }
+        let lastByte = this.solanaHexByte(candidateHex, 62);
+        if (lastByte >= 128) {
+            lastByte = lastByte - 128;
+        }
+        const yHex = candidateHex.slice(0, 62) + this.solanaU8Hex(lastByte);
+        const y = this.solanaFieldFromLittleEndianHex(yHex);
+        const p = this.solanaFieldP();
+        if (this.solanaFieldCompare(y, p) >= 0) {
+            return false;
+        }
+        const one = this.solanaFieldOne();
+        const y2 = this.solanaFieldSquare(y);
+        const u = this.solanaFieldSub(y2, one);
+        const dy2 = this.solanaFieldMul(this.solanaFieldD(), y2);
+        const v = this.solanaFieldAdd(dy2, one);
+        const invV = this.solanaFieldPow(v, '7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeb');
+        const x2 = this.solanaFieldMul(u, invV);
+        if (this.solanaFieldIsZero(x2)) {
+            return true;
+        }
+        const legendre = this.solanaFieldPow(x2, '3ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff6');
+        return this.solanaFieldIsOne(legendre);
+    }
+    solanaFindProgramAddress(seeds, programId) {
+        const programHex = this.solanaPubkeyHex(programId);
+        const markerHex = this.solanaStringHex('ProgramDerivedAddress');
+        let seedHex = '';
+        for (let i = 0; i < seeds.length; i++) {
+            seedHex += seeds[i];
+        }
+        let bump = 255;
+        while (bump >= 0) {
+            const candidateBytes = this.base16ToBinary(seedHex + this.solanaU8Hex(bump) + programHex + markerHex);
+            const hash = this.hash(candidateBytes, sha256, 'binary');
+            const hashHex = this.binaryToBase16(hash);
+            if (!this.solanaIsOnCurveHex(hashHex)) {
+                return this.binaryToBase58(hash);
+            }
+            bump = bump - 1;
+        }
+        throw new ExchangeError(this.id + ' unable to find Solana program address');
+    }
+    fibePda(seeds, programId = undefined) {
+        let program = programId;
+        if (program === undefined) {
+            program = this.fibeProgramId();
+        }
+        return this.solanaFindProgramAddress(seeds, program);
+    }
+    fibeGetUserStatePda(user) {
+        return this.fibePda([this.solanaStringHex('user_state'), this.solanaPubkeyHex(user)]);
+    }
+    fibeGetSubAccountStatePda(owner, subAccountIndex) {
+        return this.fibePda([this.solanaStringHex('sub_account_state'), this.solanaPubkeyHex(owner), this.solanaU8Hex(subAccountIndex)]);
+    }
+    fibeGetUserMarginAccountPda(owner, subAccountIndex, quoteMint) {
+        return this.fibePda([this.solanaStringHex('user_margin_account'), this.solanaPubkeyHex(owner), this.solanaU8Hex(subAccountIndex), this.solanaPubkeyHex(quoteMint)]);
+    }
+    fibeGetOrderPda(owner, subAccountIndex, orderId) {
+        return this.fibePda([this.solanaStringHex('order_cid'), this.solanaPubkeyHex(owner), this.solanaU8Hex(subAccountIndex), this.solanaU64leHex(orderId)]);
+    }
+    fibeGetSpotMarketVaultPda(marketIndex, tokenMint) {
+        return this.fibePda([this.solanaStringHex('spot_vault'), this.solanaU64leHex(marketIndex), this.solanaPubkeyHex(tokenMint)]);
+    }
+    fibeGetPerpMarketVaultPda(tokenMint) {
+        return this.fibePda([this.solanaStringHex('perp_vault'), this.solanaPubkeyHex(tokenMint)]);
+    }
+    fibeGetVaultAuthorityPda() {
+        return this.fibePda([this.solanaStringHex('vault_authority')]);
+    }
+    fibeGetHfmmRegistryPda(marketType, marketIndex) {
+        let seed = 'perp_hfmm_market_registry';
+        if (marketType === 'S') {
+            seed = 'spot_hfmm_market_registry';
+        }
+        return this.fibePda([this.solanaStringHex(seed), this.solanaU64leHex(marketIndex)]);
+    }
+    fibeGetPerpControlParamsPda(quoteMint) {
+        return this.fibePda([this.solanaStringHex('perp_control_params'), this.solanaPubkeyHex(quoteMint)]);
+    }
+    fibeGetHfmmMarginAccountsPda(quoteMint) {
+        return this.fibePda([this.solanaStringHex('hfmm_margin_accounts'), this.solanaPubkeyHex(quoteMint)]);
+    }
+    fibeGetTickArrayPda(marketType, marketIndex, priceInTicks) {
+        let seed = 'perp_tick_array';
+        if (marketType === 'S') {
+            seed = 'spot_tick_array';
+        }
+        const arrayStartTick = this.fibeGetTickArrayStartTick(priceInTicks);
+        const division = this.fibeDecimalStringDivmod(arrayStartTick, 100);
+        return this.fibePda([this.solanaStringHex(seed), this.solanaU64leHex(marketIndex), this.solanaU64leHex(this.safeString(division, 'quotient'))]);
+    }
+    fibeMaxTick() {
+        return 1638400;
+    }
+    fibeTickSizeInArray() {
+        return 100;
+    }
+    fibeMarketTickArrayBitmapOffset() {
+        return 312; // 8-byte discriminator + 304-byte market prefix
+    }
+    solanaReadU64FromHex(hex, offset) {
+        const start = offset * 2;
+        return this.solanaLeHexToDecimalString(hex.slice(start, start + 16));
+    }
+    solanaReadI8FromHex(hex, offset) {
+        const byteValue = this.solanaHexByte(hex, offset * 2);
+        if (byteValue > 127) {
+            return byteValue - 256;
+        }
+        return byteValue;
+    }
+    fibeDecodeTickArrayBitmap(marketData) {
+        const hex = this.binaryToBase16(marketData);
+        const bitmapOffset = this.fibeMarketTickArrayBitmapOffset();
+        return {
+            'askTickLowerBound': this.solanaReadU64FromHex(hex, bitmapOffset + 2048),
+            'bidTickUpperBound': this.solanaReadU64FromHex(hex, bitmapOffset + 2056),
+        };
+    }
+    fibeTickArrayStride(marketType) {
+        if (marketType === 'S') {
+            return 64;
+        }
+        return 80;
+    }
+    fibeDecodeTickArrayState(marketType, data) {
+        const hex = this.binaryToBase16(data);
+        const startTick = parseInt(this.solanaReadU64FromHex(hex, 24));
+        const tickStride = this.fibeTickArrayStride(marketType);
+        const ticks = [];
+        for (let i = 0; i < this.fibeTickSizeInArray(); i++) {
+            const offset = 32 + (i * tickStride);
+            const filled = this.solanaReadU64FromHex(hex, offset + 8);
+            const total0 = this.solanaReadU64FromHex(hex, offset + 16);
+            const total1 = this.solanaReadU64FromHex(hex, offset + 32);
+            const total = this.fibeDecimalStringAdd(total0, total1);
+            let unfilled = '0';
+            if (this.fibeDecimalStringCompare(total, filled) >= 0) {
+                unfilled = this.fibeDecimalStringSubtract(total, filled);
+            }
+            ticks.push({
+                'unfilledLots': unfilled,
+                'sideBit': this.solanaReadI8FromHex(hex, offset + 58),
+            });
+        }
+        return {
+            'startTick': startTick,
+            'ticks': ticks,
+        };
+    }
+    async solanaGetMultipleAccountData(rpcUrl, pubkeys, commitment = 'confirmed') {
+        const result = [];
+        let offset = 0;
+        while (offset < pubkeys.length) {
+            const chunk = pubkeys.slice(offset, offset + 100);
+            const response = await this.solanaRpc(rpcUrl, 'getMultipleAccounts', [
+                chunk,
+                { 'encoding': 'base64', 'commitment': commitment },
+            ]);
+            const values = this.safeList(response, 'value', []);
+            for (let i = 0; i < values.length; i++) {
+                const value = this.safeValue(values, i);
+                if (value === undefined) {
+                    result.push(undefined);
+                }
+                else {
+                    const data = this.safeList(value, 'data', []);
+                    result.push(this.base64ToBinary(data[0]));
+                }
+            }
+            offset = offset + 100;
+        }
+        return result;
+    }
+    async fibeGetTickArrayStates(rpcUrl, market, pubkeys, commitment = 'confirmed') {
+        const states = [];
+        const accounts = await this.solanaGetMultipleAccountData(rpcUrl, pubkeys, commitment);
+        const marketType = this.safeString(market, 'marketType');
+        for (let i = 0; i < accounts.length; i++) {
+            const data = accounts[i];
+            if (data !== undefined) {
+                states.push(this.fibeDecodeTickArrayState(marketType, data));
+            }
+        }
+        return states;
+    }
+    fibeFillTickLots(tick, lots, side) {
+        const sideBit = this.safeInteger(tick, 'sideBit');
+        if (((side === 'B') && (sideBit !== -1)) || ((side === 'A') && (sideBit !== 1))) {
+            return lots;
+        }
+        const unfilledLots = this.safeString(tick, 'unfilledLots', '0');
+        if (this.fibeDecimalStringCompare(unfilledLots, lots) >= 0) {
+            return '0';
+        }
+        return this.fibeDecimalStringSubtract(lots, unfilledLots);
+    }
+    fibeFillTickArrayBid(state, priceInTicks, lots) {
+        const startTick = this.safeInteger(state, 'startTick');
+        const ticks = this.safeList(state, 'ticks', []);
+        let remainingLots = lots;
+        for (let i = 0; i < ticks.length; i++) {
+            const tickIndex = startTick + i;
+            if (tickIndex > priceInTicks) {
+                break;
+            }
+            remainingLots = this.fibeFillTickLots(ticks[i], remainingLots, 'B');
+            if (remainingLots === '0') {
+                break;
+            }
+        }
+        return remainingLots;
+    }
+    fibeFillTickArrayAsk(state, priceInTicks, lots) {
+        const startTick = this.safeInteger(state, 'startTick');
+        const ticks = this.safeList(state, 'ticks', []);
+        let remainingLots = lots;
+        for (let revIndex = 0; revIndex < ticks.length; revIndex++) {
+            const index = ticks.length - revIndex - 1;
+            const tickIndex = startTick + this.fibeTickSizeInArray() - revIndex - 1;
+            if (tickIndex < priceInTicks) {
+                break;
+            }
+            remainingLots = this.fibeFillTickLots(ticks[index], remainingLots, 'A');
+            if (remainingLots === '0') {
+                break;
+            }
+        }
+        return remainingLots;
+    }
+    fibeFindTickArrayIndexesForOrder(states, priceInTicks, baseLots, side) {
+        const startTick = parseInt(this.fibeGetTickArrayStartTick(this.numberToString(priceInTicks)));
+        const indexes = [];
+        let remainingLots = baseLots;
+        if (side === 'B') {
+            for (let i = 0; i < states.length; i++) {
+                const state = states[i];
+                const stateStartTick = this.safeInteger(state, 'startTick');
+                if (stateStartTick > startTick) {
+                    break;
+                }
+                indexes.push(stateStartTick);
+                remainingLots = this.fibeFillTickArrayBid(state, priceInTicks, remainingLots);
+                if (remainingLots === '0') {
+                    break;
+                }
+            }
+        }
+        else {
+            let i = states.length - 1;
+            while (i >= 0) {
+                const state = states[i];
+                const stateStartTick = this.safeInteger(state, 'startTick');
+                if (stateStartTick < startTick) {
+                    break;
+                }
+                indexes.push(stateStartTick);
+                remainingLots = this.fibeFillTickArrayAsk(state, priceInTicks, remainingLots);
+                if (remainingLots === '0') {
+                    break;
+                }
+                i = i - 1;
+            }
+            indexes.reverse();
+        }
+        return indexes;
+    }
+    fibeGetAllTickArrayIndexesForBid(priceInTicks, tickArrayIndexes) {
+        const allIndexes = [];
+        const currentIndex = parseInt(this.fibeGetTickArrayStartTick(this.numberToString(priceInTicks)));
+        const toIndex = (tickArrayIndexes.length > 0) ? tickArrayIndexes[0] : currentIndex;
+        const fromIndex = Math.max(toIndex - (this.fibeTickSizeInArray() * 2), 0);
+        const tickSize = this.fibeTickSizeInArray();
+        let beforeCount = 0;
+        if (fromIndex < toIndex) {
+            beforeCount = Math.floor((toIndex - fromIndex) / tickSize);
+        }
+        for (let i = 0; i < beforeCount; i++) {
+            const index = fromIndex + (i * tickSize);
+            allIndexes.push(index);
+        }
+        for (let i = 0; i < tickArrayIndexes.length; i++) {
+            allIndexes.push(tickArrayIndexes[i]);
+        }
+        let lastTickIndex = currentIndex;
+        if (tickArrayIndexes.length > 0) {
+            const lastIndex = tickArrayIndexes.length - 1;
+            lastTickIndex = tickArrayIndexes[lastIndex];
+        }
+        const fromIndexAfter = lastTickIndex + this.fibeTickSizeInArray();
+        const toIndexAfter = Math.min(fromIndexAfter + (this.fibeTickSizeInArray() * 2), currentIndex);
+        let afterCount = 0;
+        if (fromIndexAfter < toIndexAfter) {
+            afterCount = Math.floor((toIndexAfter - fromIndexAfter) / tickSize);
+        }
+        for (let i = 0; i < afterCount; i++) {
+            const index = fromIndexAfter + (i * tickSize);
+            allIndexes.push(index);
+        }
+        allIndexes.push(currentIndex);
+        return allIndexes;
+    }
+    fibeGetAllTickArrayIndexesForAsk(priceInTicks, tickArrayIndexes) {
+        const currentIndex = parseInt(this.fibeGetTickArrayStartTick(this.numberToString(priceInTicks)));
+        const allIndexes = [currentIndex];
+        const toIndex = (tickArrayIndexes.length > 0) ? tickArrayIndexes[0] : currentIndex;
+        const fromIndex = Math.max(Math.max(toIndex - (this.fibeTickSizeInArray() * 2), 0), currentIndex + this.fibeTickSizeInArray());
+        const tickSize = this.fibeTickSizeInArray();
+        let beforeCount = 0;
+        if (fromIndex < toIndex) {
+            beforeCount = Math.floor((toIndex - fromIndex) / tickSize);
+        }
+        for (let i = 0; i < beforeCount; i++) {
+            const index = fromIndex + (i * tickSize);
+            allIndexes.push(index);
+        }
+        for (let i = 0; i < tickArrayIndexes.length; i++) {
+            allIndexes.push(tickArrayIndexes[i]);
+        }
+        let lastTickIndex = currentIndex;
+        if (tickArrayIndexes.length > 0) {
+            const lastIndex = tickArrayIndexes.length - 1;
+            lastTickIndex = tickArrayIndexes[lastIndex];
+        }
+        const fromIndexAfter = lastTickIndex + this.fibeTickSizeInArray();
+        const toIndexAfter = Math.min(fromIndexAfter + (this.fibeTickSizeInArray() * 2), this.fibeMaxTick());
+        let afterCount = 0;
+        if (fromIndexAfter < toIndexAfter) {
+            afterCount = Math.floor((toIndexAfter - fromIndexAfter) / tickSize);
+        }
+        for (let i = 0; i < afterCount; i++) {
+            const index = fromIndexAfter + (i * tickSize);
+            allIndexes.push(index);
+        }
+        return allIndexes;
+    }
+    async fibeGetTickArraysForOrder(rpcUrl, market, priceInTicks, sizeInBase, side, commitment) {
+        const priceInTicksNumber = parseInt(priceInTicks);
+        const marketType = this.safeString(market, 'marketType');
+        const marketIndex = this.safeString(market, 'marketIndex');
+        const marketData = await this.solanaGetAccountData(rpcUrl, this.safeString(market, 'marketPubkey'), commitment);
+        const bitmap = this.fibeDecodeTickArrayBitmap(marketData);
+        const baseLots = this.fibeDecimalStringCeilDivSmall(sizeInBase, parseInt(this.safeString(market, 'lotSizeInBaseBaseUnits')));
+        const candidates = [];
+        if (side === 'B') {
+            const lowestAskStart = parseInt(this.safeString(bitmap, 'askTickLowerBound'));
+            const endIndex = parseInt(this.fibeGetTickArrayStartTick(priceInTicks));
+            const buyTickSize = this.fibeTickSizeInArray();
+            let buyCandidateCount = 0;
+            if (lowestAskStart < endIndex) {
+                buyCandidateCount = Math.floor((endIndex - lowestAskStart) / buyTickSize);
+            }
+            for (let i = 0; i < buyCandidateCount; i++) {
+                const index = lowestAskStart + (i * buyTickSize);
+                candidates.push(this.fibeGetTickArrayPda(marketType, marketIndex, this.numberToString(index)));
+            }
+            const buyStates = await this.fibeGetTickArrayStates(rpcUrl, market, candidates, commitment);
+            const buyIndexes = this.fibeFindTickArrayIndexesForOrder(buyStates, priceInTicksNumber, baseLots, side);
+            const buyAllIndexes = this.fibeGetAllTickArrayIndexesForBid(priceInTicksNumber, buyIndexes);
+            const buyResult = [];
+            for (let i = 0; i < buyAllIndexes.length; i++) {
+                buyResult.push(this.fibeGetTickArrayPda(marketType, marketIndex, this.numberToString(buyAllIndexes[i])));
+            }
+            return buyResult;
+        }
+        const highestBidStart = parseInt(this.safeString(bitmap, 'bidTickUpperBound'));
+        const fromIndex = parseInt(this.fibeGetTickArrayStartTick(priceInTicks)) + this.fibeTickSizeInArray();
+        const sellTickSize = this.fibeTickSizeInArray();
+        let sellCandidateCount = 0;
+        if (fromIndex <= highestBidStart) {
+            sellCandidateCount = Math.floor((highestBidStart - fromIndex) / sellTickSize) + 1;
+        }
+        for (let i = 0; i < sellCandidateCount; i++) {
+            const index = fromIndex + (i * sellTickSize);
+            candidates.push(this.fibeGetTickArrayPda(marketType, marketIndex, this.numberToString(index)));
+        }
+        const sellStates = await this.fibeGetTickArrayStates(rpcUrl, market, candidates, commitment);
+        const sellIndexes = this.fibeFindTickArrayIndexesForOrder(sellStates, priceInTicksNumber, baseLots, side);
+        const sellAllIndexes = this.fibeGetAllTickArrayIndexesForAsk(priceInTicksNumber, sellIndexes);
+        const sellResult = [];
+        for (let i = 0; i < sellAllIndexes.length; i++) {
+            sellResult.push(this.fibeGetTickArrayPda(marketType, marketIndex, this.numberToString(sellAllIndexes[i])));
+        }
+        return sellResult;
+    }
+    solanaGetAssociatedTokenAddress(mint, owner, tokenProgram) {
+        return this.fibePda([this.solanaPubkeyHex(owner), this.solanaPubkeyHex(tokenProgram), this.solanaPubkeyHex(mint)], this.solanaAssociatedTokenProgramId());
+    }
+    solanaAccount(pubkey, isWritable = false, isSigner = false) {
+        return {
+            'pubkey': pubkey,
+            'isWritable': isWritable,
+            'isSigner': isSigner,
+        };
+    }
+    solanaCreateAssociatedTokenAccountIx(payer, ata, owner, mint, tokenProgram) {
+        return {
+            'programId': this.solanaAssociatedTokenProgramId(),
+            'accounts': [
+                this.solanaAccount(payer, true, true),
+                this.solanaAccount(ata, true),
+                this.solanaAccount(owner),
+                this.solanaAccount(mint),
+                this.solanaAccount(this.solanaSystemProgramId()),
+                this.solanaAccount(tokenProgram),
+            ],
+            'data': '',
+        };
+    }
+    solanaSetComputeUnitLimitIx(units) {
+        return {
+            'programId': this.solanaComputeBudgetProgramId(),
+            'accounts': [],
+            'data': this.solanaU8Hex(2) + this.solanaU32leHex(units),
+        };
+    }
+    solanaSetComputeUnitPriceIx(microLamports) {
+        return {
+            'programId': this.solanaComputeBudgetProgramId(),
+            'accounts': [],
+            'data': this.solanaU8Hex(3) + this.solanaU64leHex(microLamports),
+        };
+    }
+    solanaAddComputeBudgetIxs(instructions, params) {
+        const computeUnitLimit = this.safeInteger(params, 'computeUnitLimit');
+        const computeUnitPriceMicroLamports = this.safeString(params, 'computeUnitPriceMicroLamports');
+        if ((computeUnitLimit === undefined) && (computeUnitPriceMicroLamports === undefined)) {
+            return instructions;
+        }
+        const result = [];
+        if (computeUnitLimit !== undefined) {
+            result.push(this.solanaSetComputeUnitLimitIx(computeUnitLimit));
+        }
+        if (computeUnitPriceMicroLamports !== undefined) {
+            result.push(this.solanaSetComputeUnitPriceIx(computeUnitPriceMicroLamports));
+        }
+        for (let i = 0; i < instructions.length; i++) {
+            result.push(instructions[i]);
+        }
+        return result;
+    }
+    fibeSpotPlaceOrderIx(input) {
+        let data = this.solanaBytesHex([56, 0, 0, 0, 0, 0, 0, 0]);
+        data += this.solanaU64leHex(input['priceInTicks']);
+        data += this.solanaU64leHex(input['orderId']);
+        data += this.solanaU8Hex(this.fibeSideIndex(input['side']));
+        data += this.solanaOptionU64Hex(input['sizeInBase']);
+        data += this.solanaOptionU64Hex(undefined);
+        data += this.solanaU8Hex(this.fibeTimeInForceIndex(input['timeInForce']));
+        data += this.solanaOptionU16Hex(undefined);
+        const accounts = [
+            this.solanaAccount(this.solanaSystemProgramId()),
+            this.solanaAccount(input['owner'], true, true),
+            this.solanaAccount(input['ownerState'], true),
+            this.solanaAccount(input['order'], true),
+            this.solanaAccount(this.fibeProgramId()),
+            this.solanaAccount(this.fibeProgramId()),
+            this.solanaAccount(this.fibeProgramId()),
+            this.solanaAccount(this.fibeProgramId()),
+            this.solanaAccount(this.fibeProgramId()),
+            this.solanaAccount(input['ownerBaseTokenAccount'], true),
+            this.solanaAccount(input['ownerQuoteTokenAccount'], true),
+            this.solanaAccount(input['market'], true),
+            this.solanaAccount(input['tokenVaultBase'], true),
+            this.solanaAccount(input['tokenVaultQuote'], true),
+            this.solanaAccount(input['vaultAuthority']),
+            this.solanaAccount(input['hfmmRegistry'], true),
+            this.solanaAccount(input['tokenMintBase']),
+            this.solanaAccount(input['tokenMintQuote']),
+            this.solanaAccount(input['tokenProgramBase']),
+            this.solanaAccount(input['tokenProgramQuote']),
+        ];
+        const tickArrays = this.safeList(input, 'tickArrays', [input['tickArray']]);
+        for (let i = 0; i < tickArrays.length; i++) {
+            accounts.push(this.solanaAccount(tickArrays[i], true));
+        }
+        return {
+            'programId': this.fibeProgramId(),
+            'accounts': accounts,
+            'data': data,
+        };
+    }
+    fibeSpotCloseRestingOrderIx(input) {
+        return {
+            'programId': this.fibeProgramId(),
+            'accounts': [
+                this.solanaAccount(input['market'], true),
+                this.solanaAccount(input['owner'], true, true),
+                this.solanaAccount(input['ownerState'], true),
+                this.solanaAccount(input['order'], true),
+                this.solanaAccount(input['tickArray'], true),
+                this.solanaAccount(input['ownerBaseTokenAccount'], true),
+                this.solanaAccount(input['ownerQuoteTokenAccount'], true),
+                this.solanaAccount(input['tokenVaultBase'], true),
+                this.solanaAccount(input['tokenVaultQuote'], true),
+                this.solanaAccount(input['vaultAuthority']),
+                this.solanaAccount(input['tokenMintBase']),
+                this.solanaAccount(input['tokenMintQuote']),
+                this.solanaAccount(input['tokenProgramBase']),
+                this.solanaAccount(input['tokenProgramQuote']),
+            ],
+            'data': this.solanaBytesHex([57, 0, 0, 0, 0, 0, 0, 0]) + this.solanaU64leHex(input['orderId']),
+        };
+    }
+    fibePerpPlaceOrderIx(input) {
+        let isCrossMargin = 0;
+        if (input['isCrossMargin']) {
+            isCrossMargin = 1;
+        }
+        let autoTopUpCollateralFromWallet = 0;
+        if (input['autoTopUpCollateralFromWallet']) {
+            autoTopUpCollateralFromWallet = 1;
+        }
+        let data = this.solanaBytesHex([134, 0, 0, 0, 0, 0, 0, 0]);
+        data += this.solanaU64leHex(input['priceInTicks']);
+        data += this.solanaU64leHex(input['orderId']);
+        data += this.solanaU8Hex(this.fibeSideIndex(input['side']));
+        data += this.solanaU8Hex(isCrossMargin);
+        data += this.solanaU8Hex(autoTopUpCollateralFromWallet);
+        data += this.solanaOptionU8Hex(input['initialLeverage']);
+        data += this.solanaOptionU64Hex(input['sizeInBase']);
+        data += this.solanaOptionU64Hex(undefined);
+        data += this.solanaU8Hex(this.fibeTimeInForceIndex(input['timeInForce']));
+        data += this.solanaOptionU16Hex(undefined);
+        let ownerOrDelegateQuoteTokenAccount = this.solanaAccount(this.fibeProgramId());
+        if (input['ownerOrDelegateQuoteTokenAccount'] !== undefined) {
+            ownerOrDelegateQuoteTokenAccount = this.solanaAccount(input['ownerOrDelegateQuoteTokenAccount'], true);
+        }
+        const accounts = [
+            this.solanaAccount(this.solanaSystemProgramId()),
+            this.solanaAccount(input['market'], true),
+            this.solanaAccount(input['ownerSubAccountState']),
+            this.solanaAccount(input['ownerOrDelegate'], true, true),
+            this.solanaAccount(input['ownerState'], true),
+            this.solanaAccount(input['ownerMarginAccount'], true),
+            this.solanaAccount(input['order'], true),
+            ownerOrDelegateQuoteTokenAccount,
+            this.solanaAccount(this.fibeProgramId()),
+            this.solanaAccount(this.fibeProgramId()),
+            this.solanaAccount(this.fibeProgramId()),
+            this.solanaAccount(this.fibeProgramId()),
+            this.solanaAccount(this.fibeProgramId()),
+            this.solanaAccount(input['perpControlParams'], true),
+            this.solanaAccount(input['hfmmMarginAccounts'], true),
+            this.solanaAccount(input['tokenVaultQuote'], true),
+            this.solanaAccount(input['vaultAuthority']),
+            this.solanaAccount(input['hfmmRegistry'], true),
+            this.solanaAccount(input['tokenMintQuote']),
+            this.solanaAccount(input['tokenProgramQuote']),
+        ];
+        const tickArrays = this.safeList(input, 'tickArrays', [input['tickArray']]);
+        for (let i = 0; i < tickArrays.length; i++) {
+            accounts.push(this.solanaAccount(tickArrays[i], true));
+        }
+        return {
+            'programId': this.fibeProgramId(),
+            'accounts': accounts,
+            'data': data,
+        };
+    }
+    fibePerpCloseRestingOrderIx(input) {
+        return {
+            'programId': this.fibeProgramId(),
+            'accounts': [
+                this.solanaAccount(input['market'], true),
+                this.solanaAccount(input['ownerSubAccountState']),
+                this.solanaAccount(input['ownerOrDelegate'], true, true),
+                this.solanaAccount(input['ownerState'], true),
+                this.solanaAccount(input['ownerMarginAccount'], true),
+                this.solanaAccount(input['order'], true),
+                this.solanaAccount(input['perpControlParams']),
+                this.solanaAccount(input['tokenVaultQuote'], true),
+                this.solanaAccount(input['vaultAuthority']),
+                this.solanaAccount(input['tickArray'], true),
+            ],
+            'data': this.solanaBytesHex([135, 0, 0, 0, 0, 0, 0, 0]) + this.solanaU64leHex(input['orderId']) + this.solanaOptionU16Hex(undefined),
+        };
+    }
+    solanaFindAccountIndex(accounts, pubkey) {
+        for (let i = 0; i < accounts.length; i++) {
+            if (this.safeString(accounts[i], 'pubkey') === pubkey) {
+                return i;
+            }
+        }
+        return -1;
+    }
+    solanaAddAccountMeta(accounts, meta) {
+        const pubkey = this.safeString(meta, 'pubkey');
+        const index = this.solanaFindAccountIndex(accounts, pubkey);
+        if (index < 0) {
+            accounts.push({
+                'pubkey': pubkey,
+                'isSigner': this.safeBool(meta, 'isSigner', false),
+                'isWritable': this.safeBool(meta, 'isWritable', false),
+            });
+        }
+        else {
+            const previous = accounts[index];
+            previous['isSigner'] = this.safeBool(previous, 'isSigner', false) || this.safeBool(meta, 'isSigner', false);
+            previous['isWritable'] = this.safeBool(previous, 'isWritable', false) || this.safeBool(meta, 'isWritable', false);
+        }
+    }
+    solanaComparePubkeys(a, b) {
+        const aHex = this.solanaPubkeyHex(a);
+        const bHex = this.solanaPubkeyHex(b);
+        if (aHex < bHex) {
+            return -1;
+        }
+        if (aHex > bHex) {
+            return 1;
+        }
+        return 0;
+    }
+    solanaCompileMessageHex(payer, blockhash, instructions) {
+        const metas = [];
+        this.solanaAddAccountMeta(metas, this.solanaAccount(payer, true, true));
+        for (let i = 0; i < instructions.length; i++) {
+            const ix = instructions[i];
+            this.solanaAddAccountMeta(metas, this.solanaAccount(this.safeString(ix, 'programId')));
+            const accounts = this.safeList(ix, 'accounts', []);
+            for (let j = 0; j < accounts.length; j++) {
+                this.solanaAddAccountMeta(metas, accounts[j]);
+            }
+        }
+        const payerIndex = this.solanaFindAccountIndex(metas, payer);
+        metas[payerIndex]['isSigner'] = true;
+        metas[payerIndex]['isWritable'] = true;
+        const nonPayerMetas = [];
+        for (let i = 0; i < metas.length; i++) {
+            const meta = metas[i];
+            if (this.safeString(meta, 'pubkey') !== payer) {
+                nonPayerMetas.push(meta);
+            }
+        }
+        nonPayerMetas.sort((a, b) => this.solanaComparePubkeys(this.safeString(a, 'pubkey'), this.safeString(b, 'pubkey')));
+        const ordered = [];
+        ordered.push(metas[payerIndex]);
+        for (let i = 0; i < nonPayerMetas.length; i++) {
+            const meta = nonPayerMetas[i];
+            if (this.safeBool(meta, 'isSigner') && this.safeBool(meta, 'isWritable')) {
+                ordered.push(meta);
+            }
+        }
+        for (let i = 0; i < nonPayerMetas.length; i++) {
+            const meta = nonPayerMetas[i];
+            if (this.safeBool(meta, 'isSigner') && !this.safeBool(meta, 'isWritable')) {
+                ordered.push(meta);
+            }
+        }
+        for (let i = 0; i < nonPayerMetas.length; i++) {
+            const meta = nonPayerMetas[i];
+            if (!this.safeBool(meta, 'isSigner') && this.safeBool(meta, 'isWritable')) {
+                ordered.push(meta);
+            }
+        }
+        for (let i = 0; i < nonPayerMetas.length; i++) {
+            const meta = nonPayerMetas[i];
+            if (!this.safeBool(meta, 'isSigner') && !this.safeBool(meta, 'isWritable')) {
+                ordered.push(meta);
+            }
+        }
+        let requiredSignatures = 0;
+        let readonlySigners = 0;
+        let readonlyUnsigned = 0;
+        for (let i = 0; i < ordered.length; i++) {
+            const meta = ordered[i];
+            if (this.safeBool(meta, 'isSigner')) {
+                requiredSignatures += 1;
+                if (!this.safeBool(meta, 'isWritable')) {
+                    readonlySigners += 1;
+                }
+            }
+            else if (!this.safeBool(meta, 'isWritable')) {
+                readonlyUnsigned += 1;
+            }
+        }
+        let accountHex = '';
+        for (let i = 0; i < ordered.length; i++) {
+            accountHex += this.solanaPubkeyHex(this.safeString(ordered[i], 'pubkey'));
+        }
+        let instructionsHex = '';
+        for (let i = 0; i < instructions.length; i++) {
+            const ix = instructions[i];
+            const accounts = this.safeList(ix, 'accounts', []);
+            let accountIndexesHex = '';
+            for (let j = 0; j < accounts.length; j++) {
+                const accountPubkey = this.safeString(accounts[j], 'pubkey');
+                accountIndexesHex += this.solanaU8Hex(this.solanaFindAccountIndex(ordered, accountPubkey));
+            }
+            const programIndex = this.solanaFindAccountIndex(ordered, this.safeString(ix, 'programId'));
+            const data = this.safeString(ix, 'data', '');
+            instructionsHex += this.solanaU8Hex(programIndex);
+            instructionsHex += this.solanaShortVecHex(accounts.length);
+            instructionsHex += accountIndexesHex;
+            instructionsHex += this.solanaShortVecHex(this.parseToInt(data.length / 2));
+            instructionsHex += data;
+        }
+        let messageHex = this.solanaU8Hex(128);
+        messageHex += this.solanaU8Hex(requiredSignatures);
+        messageHex += this.solanaU8Hex(readonlySigners);
+        messageHex += this.solanaU8Hex(readonlyUnsigned);
+        messageHex += this.solanaShortVecHex(ordered.length);
+        messageHex += accountHex;
+        messageHex += this.solanaPubkeyHex(blockhash);
+        messageHex += this.solanaShortVecHex(instructions.length);
+        messageHex += instructionsHex;
+        messageHex += this.solanaShortVecHex(0);
+        return messageHex;
+    }
+    solanaSignTransaction(payer, privateKeyHex, blockhash, instructions) {
+        const messageHex = this.solanaCompileMessageHex(payer, blockhash, instructions);
+        const messageBytes = this.base16ToBinary(messageHex);
+        const privateKeyBytes = this.base16ToBinary(privateKeyHex);
+        const signatureBase64 = eddsa(messageBytes, privateKeyBytes, ed25519);
+        const signature = this.base64ToBinary(signatureBase64);
+        const signatureHex = this.binaryToBase16(signature);
+        const transactionHex = this.solanaShortVecHex(1) + signatureHex + messageHex;
+        return {
+            'signature': this.binaryToBase58(signature),
+            'transaction': this.binaryToBase64(this.base16ToBinary(transactionHex)),
+        };
+    }
+    solanaReadU64(data, offset) {
+        const hex = this.binaryToBase16(data);
+        const start = offset * 2;
+        return this.solanaLeHexToDecimalString(hex.slice(start, start + 16));
+    }
+    async fibeLocalTxCreateOrder(params) {
+        const market = this.fibeTxParseMarket(params['market']);
+        if ((market['baseMint'] === this.solanaNativeMint()) || (market['quoteMint'] === this.solanaNativeMint())) {
+            throw new ExchangeError(this.id + ' local Fibe transaction construction does not support native SOL wrapping');
+        }
+        const marketType = this.safeString(market, 'marketType');
+        let marginMode = this.safeString(params, 'marginMode', 'cross');
+        if (marketType === 'P') {
+            marginMode = this.fibeNormalizeMarginMode('createOrder', marginMode);
+        }
+        const owner = this.safeString(params, 'user');
+        const privateKeyHex = this.solanaParsePrivateKeyHex(this.safeString(params, 'privateKey'), owner);
+        const orderId = this.safeString(params, 'orderId');
+        const priceInTicks = this.fibePriceToTicks(this.safeString(params, 'price'), this.safeInteger(market, 'quoteDecimals'), this.safeString(market, 'tickSizeInQuoteBaseUnits'), this.safeString(params, 'side'), this.safeNumber(params, 'slippage'));
+        const sizeInBase = this.fibeNormalizeQuantity(this.fibeDecimalToUnits(this.safeString(params, 'amount'), this.safeInteger(market, 'baseDecimals')), this.safeString(market, 'lotSizeInBaseBaseUnits'));
+        const orderTickArray = this.fibeGetTickArrayPda(this.safeString(market, 'marketType'), this.safeString(market, 'marketIndex'), priceInTicks);
+        const rpcUrl = this.safeString(params, 'rpcUrl');
+        const commitment = this.safeString(params, 'commitment', 'confirmed');
+        const tickArrays = await this.fibeGetTickArraysForOrder(rpcUrl, market, priceInTicks, sizeInBase, this.safeString(params, 'side'), commitment);
+        const tokenProgramQuote = await this.solanaGetTokenProgram(rpcUrl, this.safeString(market, 'quoteMint'), this.safeString(market, 'tokenProgramQuote'), commitment);
+        const ixs = [];
+        if (marketType === 'S') {
+            const tokenProgramBase = await this.solanaGetTokenProgram(rpcUrl, this.safeString(market, 'baseMint'), this.safeString(market, 'tokenProgramBase'), commitment);
+            const ownerBaseTokenAccount = this.solanaGetAssociatedTokenAddress(this.safeString(market, 'baseMint'), owner, tokenProgramBase);
+            const ownerQuoteTokenAccount = this.solanaGetAssociatedTokenAddress(this.safeString(market, 'quoteMint'), owner, tokenProgramQuote);
+            let ataToCreate = ownerQuoteTokenAccount;
+            let ataMint = this.safeString(market, 'quoteMint');
+            let ataTokenProgram = tokenProgramQuote;
+            if (this.safeString(params, 'side') === 'B') {
+                ataToCreate = ownerBaseTokenAccount;
+                ataMint = this.safeString(market, 'baseMint');
+                ataTokenProgram = tokenProgramBase;
+            }
+            const ataExists = await this.solanaAccountExists(rpcUrl, ataToCreate, commitment);
+            if (!ataExists) {
+                ixs.push(this.solanaCreateAssociatedTokenAccountIx(owner, ataToCreate, owner, ataMint, ataTokenProgram));
+            }
+            ixs.push(this.fibeSpotPlaceOrderIx({
+                'owner': owner,
+                'ownerState': this.fibeGetUserStatePda(owner),
+                'order': this.fibeGetOrderPda(owner, 0, orderId),
+                'ownerBaseTokenAccount': ownerBaseTokenAccount,
+                'ownerQuoteTokenAccount': ownerQuoteTokenAccount,
+                'market': this.safeString(market, 'marketPubkey'),
+                'tokenVaultBase': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'marketIndex'), this.safeString(market, 'baseMint')),
+                'tokenVaultQuote': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'marketIndex'), this.safeString(market, 'quoteMint')),
+                'vaultAuthority': this.fibeGetVaultAuthorityPda(),
+                'hfmmRegistry': this.fibeGetHfmmRegistryPda('S', this.safeString(market, 'marketIndex')),
+                'tokenMintBase': this.safeString(market, 'baseMint'),
+                'tokenMintQuote': this.safeString(market, 'quoteMint'),
+                'tokenProgramBase': tokenProgramBase,
+                'tokenProgramQuote': tokenProgramQuote,
+                'priceInTicks': priceInTicks,
+                'orderId': orderId,
+                'side': this.safeString(params, 'side'),
+                'sizeInBase': sizeInBase,
+                'timeInForce': this.safeString(params, 'timeInForce'),
+                'tickArray': orderTickArray,
+                'tickArrays': tickArrays,
+            }));
+        }
+        else {
+            const subAccountIndex = this.safeInteger(params, 'subAccountIndex', 0);
+            const autoTopUp = this.safeBool(params, 'autoTopUpCollateralFromWallet', true);
+            let ownerQuoteTokenAccount = undefined;
+            if (autoTopUp) {
+                ownerQuoteTokenAccount = this.solanaGetAssociatedTokenAddress(this.safeString(market, 'quoteMint'), owner, tokenProgramQuote);
+            }
+            if (ownerQuoteTokenAccount !== undefined) {
+                const ownerQuoteTokenAccountExists = await this.solanaAccountExists(rpcUrl, ownerQuoteTokenAccount, commitment);
+                if (!ownerQuoteTokenAccountExists) {
+                    ixs.push(this.solanaCreateAssociatedTokenAccountIx(owner, ownerQuoteTokenAccount, owner, this.safeString(market, 'quoteMint'), tokenProgramQuote));
+                }
+            }
+            const isCrossMargin = (marginMode === 'cross');
+            ixs.push(this.fibePerpPlaceOrderIx({
+                'owner': owner,
+                'ownerOrDelegate': owner,
+                'ownerSubAccountState': this.fibeGetSubAccountStatePda(owner, subAccountIndex),
+                'ownerState': this.fibeGetUserStatePda(owner),
+                'ownerMarginAccount': this.fibeGetUserMarginAccountPda(owner, subAccountIndex, this.safeString(market, 'quoteMint')),
+                'order': this.fibeGetOrderPda(owner, subAccountIndex, orderId),
+                'ownerOrDelegateQuoteTokenAccount': ownerQuoteTokenAccount,
+                'market': this.safeString(market, 'marketPubkey'),
+                'perpControlParams': this.fibeGetPerpControlParamsPda(this.safeString(market, 'quoteMint')),
+                'hfmmMarginAccounts': this.fibeGetHfmmMarginAccountsPda(this.safeString(market, 'quoteMint')),
+                'tokenVaultQuote': this.fibeGetPerpMarketVaultPda(this.safeString(market, 'quoteMint')),
+                'vaultAuthority': this.fibeGetVaultAuthorityPda(),
+                'hfmmRegistry': this.fibeGetHfmmRegistryPda('P', this.safeString(market, 'marketIndex')),
+                'tokenMintQuote': this.safeString(market, 'quoteMint'),
+                'tokenProgramQuote': tokenProgramQuote,
+                'priceInTicks': priceInTicks,
+                'orderId': orderId,
+                'side': this.safeString(params, 'side'),
+                'isCrossMargin': isCrossMargin,
+                'autoTopUpCollateralFromWallet': autoTopUp,
+                'initialLeverage': this.safeInteger(params, 'initialLeverage'),
+                'sizeInBase': sizeInBase,
+                'timeInForce': this.safeString(params, 'timeInForce'),
+                'tickArray': orderTickArray,
+                'tickArrays': tickArrays,
+            }));
+        }
+        const result = await this.solanaSignAndSend(rpcUrl, owner, privateKeyHex, ixs, params);
+        let orderSubAccountIndex = this.safeInteger(params, 'subAccountIndex', 0);
+        if (this.safeString(market, 'marketType') === 'S') {
+            orderSubAccountIndex = 0;
+        }
+        result['orderPda'] = this.fibeGetOrderPda(owner, orderSubAccountIndex, orderId);
+        result['priceInTicks'] = priceInTicks;
+        result['tickArray'] = orderTickArray;
+        result['tickArrays'] = tickArrays;
+        return result;
+    }
+    async fibeLocalTxCancelOrder(params) {
+        const market = this.fibeTxParseMarket(params['market']);
+        if ((market['baseMint'] === this.solanaNativeMint()) || (market['quoteMint'] === this.solanaNativeMint())) {
+            throw new ExchangeError(this.id + ' local Fibe transaction construction does not support native SOL wrapping');
+        }
+        const owner = this.safeString(params, 'user');
+        const privateKeyHex = this.solanaParsePrivateKeyHex(this.safeString(params, 'privateKey'), owner);
+        const orderId = this.safeString(params, 'orderId');
+        let subAccountIndex = this.safeInteger(params, 'subAccountIndex', 0);
+        if (this.safeString(market, 'marketType') === 'S') {
+            subAccountIndex = 0;
+        }
+        const order = this.fibeGetOrderPda(owner, subAccountIndex, orderId);
+        const rpcUrl = this.safeString(params, 'rpcUrl');
+        const commitment = this.safeString(params, 'commitment', 'confirmed');
+        const orderAccount = await this.solanaGetAccountData(rpcUrl, order, commitment);
+        const priceInTicks = this.solanaReadU64(orderAccount, 64);
+        const tickArray = this.fibeGetTickArrayPda(this.safeString(market, 'marketType'), this.safeString(market, 'marketIndex'), priceInTicks);
+        let ix = undefined;
+        if (this.safeString(market, 'marketType') === 'S') {
+            const tokenProgramBase = await this.solanaGetTokenProgram(rpcUrl, this.safeString(market, 'baseMint'), this.safeString(market, 'tokenProgramBase'), commitment);
+            const tokenProgramQuote = await this.solanaGetTokenProgram(rpcUrl, this.safeString(market, 'quoteMint'), this.safeString(market, 'tokenProgramQuote'), commitment);
+            ix = this.fibeSpotCloseRestingOrderIx({
+                'owner': owner,
+                'ownerState': this.fibeGetUserStatePda(owner),
+                'order': order,
+                'tickArray': tickArray,
+                'ownerBaseTokenAccount': this.solanaGetAssociatedTokenAddress(this.safeString(market, 'baseMint'), owner, tokenProgramBase),
+                'ownerQuoteTokenAccount': this.solanaGetAssociatedTokenAddress(this.safeString(market, 'quoteMint'), owner, tokenProgramQuote),
+                'market': this.safeString(market, 'marketPubkey'),
+                'tokenVaultBase': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'marketIndex'), this.safeString(market, 'baseMint')),
+                'tokenVaultQuote': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'marketIndex'), this.safeString(market, 'quoteMint')),
+                'vaultAuthority': this.fibeGetVaultAuthorityPda(),
+                'tokenMintBase': this.safeString(market, 'baseMint'),
+                'tokenMintQuote': this.safeString(market, 'quoteMint'),
+                'tokenProgramBase': tokenProgramBase,
+                'tokenProgramQuote': tokenProgramQuote,
+                'orderId': orderId,
+            });
+        }
+        else {
+            ix = this.fibePerpCloseRestingOrderIx({
+                'market': this.safeString(market, 'marketPubkey'),
+                'ownerSubAccountState': this.fibeGetSubAccountStatePda(owner, subAccountIndex),
+                'ownerOrDelegate': owner,
+                'ownerState': this.fibeGetUserStatePda(owner),
+                'ownerMarginAccount': this.fibeGetUserMarginAccountPda(owner, subAccountIndex, this.safeString(market, 'quoteMint')),
+                'order': order,
+                'perpControlParams': this.fibeGetPerpControlParamsPda(this.safeString(market, 'quoteMint')),
+                'tokenVaultQuote': this.fibeGetPerpMarketVaultPda(this.safeString(market, 'quoteMint')),
+                'vaultAuthority': this.fibeGetVaultAuthorityPda(),
+                'tickArray': tickArray,
+                'orderId': orderId,
+            });
+        }
+        const result = await this.solanaSignAndSend(rpcUrl, owner, privateKeyHex, [ix], params);
+        result['orderPda'] = order;
+        result['priceInTicks'] = priceInTicks;
+        result['tickArray'] = tickArray;
+        return result;
+    }
+    fibeTxParseMarket(market) {
+        const info = this.safeDict(market, 'info', {});
+        let marketType = 'P';
+        if (this.safeBool(market, 'spot')) {
+            marketType = 'S';
+        }
+        return {
+            'marketType': marketType,
+            'marketIndex': this.safeString(info, 'marketIndex'),
+            'marketPubkey': this.safeString(info, 'marketPubkey'),
+            'baseMint': this.safeString(info, 'baseMint'),
+            'quoteMint': this.safeString(info, 'quoteMint'),
+            'baseDecimals': this.safeInteger(info, 'baseDecimals'),
+            'quoteDecimals': this.safeInteger(info, 'quoteDecimals'),
+            'tickSizeInQuoteBaseUnits': this.safeString(info, 'tickSizeInQuoteBaseUnits'),
+            'lotSizeInBaseBaseUnits': this.safeString(info, 'lotSizeInBaseBaseUnits'),
+            'tokenProgramBase': this.safeString(info, 'tokenProgramBase'),
+            'tokenProgramQuote': this.safeString(info, 'tokenProgramQuote'),
+        };
+    }
+    solanaTokenProgramCache() {
+        let tokenPrograms = this.safeDict(this.options, 'tokenPrograms');
+        if (tokenPrograms === undefined) {
+            this.options['tokenPrograms'] = {};
+            tokenPrograms = this.safeDict(this.options, 'tokenPrograms');
+        }
+        return tokenPrograms;
+    }
+    async solanaGetTokenProgram(rpcUrl, mint, tokenProgram = undefined, commitment = 'confirmed') {
+        if (tokenProgram !== undefined) {
+            return tokenProgram;
+        }
+        const tokenPrograms = this.solanaTokenProgramCache();
+        const cached = this.safeString(tokenPrograms, mint);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const accountInfo = await this.solanaGetAccountInfo(rpcUrl, mint, commitment);
+        if (accountInfo === undefined) {
+            throw new ExchangeError(this.id + ' token mint account not found ' + mint);
+        }
+        const owner = accountInfo['owner'];
+        tokenPrograms[mint] = owner;
+        return owner;
+    }
+    async solanaAccountExists(rpcUrl, pubkey, commitment = 'confirmed') {
+        const accountInfo = await this.solanaGetAccountInfo(rpcUrl, pubkey, commitment);
+        return accountInfo !== undefined;
+    }
+    async solanaGetAccountData(rpcUrl, pubkey, commitment = 'confirmed') {
+        const accountInfo = await this.solanaGetAccountInfo(rpcUrl, pubkey, commitment);
+        if (accountInfo === undefined) {
+            throw new ExchangeError(this.id + ' account not found ' + pubkey);
+        }
+        return accountInfo['data'];
+    }
+    async solanaGetAccountInfo(rpcUrl, pubkey, commitment = 'confirmed') {
+        const response = await this.solanaRpc(rpcUrl, 'getAccountInfo', [
+            pubkey,
+            { 'encoding': 'base64', 'commitment': commitment },
+        ]);
+        const value = this.safeValue(response, 'value');
+        if (value === undefined) {
+            return undefined;
+        }
+        const data = this.safeList(value, 'data', []);
+        return {
+            'owner': this.safeString(value, 'owner'),
+            'data': this.base64ToBinary(data[0]),
+        };
+    }
+    async solanaSignAndSend(rpcUrl, payer, privateKeyHex, instructions, params = {}) {
+        const commitment = this.safeString(params, 'commitment', 'confirmed');
+        let blockhash = this.safeString(params, 'blockhash');
+        let lastValidBlockHeight = undefined;
+        if (blockhash === undefined) {
+            const blockhashResponse = await this.solanaRpc(rpcUrl, 'getLatestBlockhash', [
+                { 'commitment': commitment },
+            ]);
+            const value = this.safeDict(blockhashResponse, 'value', {});
+            blockhash = this.safeString(value, 'blockhash');
+            lastValidBlockHeight = this.safeInteger(value, 'lastValidBlockHeight');
+        }
+        const finalInstructions = this.solanaAddComputeBudgetIxs(instructions, params);
+        const signed = this.solanaSignTransaction(payer, privateKeyHex, blockhash, finalInstructions);
+        const sendOptions = {
+            'encoding': 'base64',
+        };
+        let preflightCommitment = this.safeString(params, 'preflightCommitment');
+        if (preflightCommitment === undefined) {
+            preflightCommitment = commitment;
+        }
+        sendOptions['preflightCommitment'] = preflightCommitment;
+        const skipPreflight = this.safeBool(params, 'skipPreflight');
+        if (skipPreflight !== undefined) {
+            sendOptions['skipPreflight'] = skipPreflight;
+        }
+        const maxRetries = this.safeInteger(params, 'maxRetries');
+        if (maxRetries !== undefined) {
+            sendOptions['maxRetries'] = maxRetries;
+        }
+        const minContextSlot = this.safeInteger(params, 'minContextSlot');
+        if (minContextSlot !== undefined) {
+            sendOptions['minContextSlot'] = minContextSlot;
+        }
+        const signature = await this.solanaRpc(rpcUrl, 'sendTransaction', [
+            signed['transaction'],
+            sendOptions,
+        ]);
+        return {
+            'signature': signature,
+            'transaction': signed['transaction'],
+            'blockhash': blockhash,
+            'lastValidBlockHeight': lastValidBlockHeight,
+            'sendOptions': sendOptions,
+        };
+    }
+    async solanaRpc(rpcUrl, method, params) {
+        const response = await this.fetch(rpcUrl, 'POST', { 'Content-Type': 'application/json' }, this.json({
+            'jsonrpc': '2.0',
+            'id': 1,
+            'method': method,
+            'params': params,
+        }));
+        if (response['error'] !== undefined) {
+            const error = response['error'];
+            throw new ExchangeError(this.id + ' Solana RPC ' + method + ' failed: ' + this.json(error));
+        }
+        return response['result'];
+    }
     parseOrderStatus(status) {
         const statuses = {
             'O': 'open',
@@ -986,6 +3092,33 @@ export default class fibe extends Exchange {
             'PostOnly': 'PO',
         };
         return this.safeString(timeInForces, timeInForce, timeInForce);
+    }
+    encodeCreateOrderTimeInForce(timeInForce, postOnly) {
+        if (postOnly) {
+            let upperTimeInForce = undefined;
+            if (timeInForce !== undefined) {
+                upperTimeInForce = this.numberToString(timeInForce).toUpperCase();
+            }
+            if ((upperTimeInForce !== undefined) && (upperTimeInForce !== 'PO')) {
+                throw new InvalidOrder(this.id + ' createOrder() postOnly cannot be combined with timeInForce ' + timeInForce);
+            }
+            return 'PostOnly';
+        }
+        if (timeInForce === undefined) {
+            return 'Gtc';
+        }
+        const upper = this.numberToString(timeInForce).toUpperCase();
+        const timeInForces = {
+            'GTC': 'Gtc',
+            'IOC': 'Ioc',
+            'PO': 'PostOnly',
+            'FOK': 'Fok',
+        };
+        const result = this.safeString(timeInForces, upper);
+        if (result === undefined) {
+            throw new InvalidOrder(this.id + ' createOrder() local transaction construction supports timeInForce GTC, IOC, PO, or FOK');
+        }
+        return result;
     }
     parseSide(side) {
         const sides = {

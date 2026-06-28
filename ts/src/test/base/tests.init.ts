@@ -60,6 +60,7 @@ import testConstants from './test.constants.js';
 import testBase58ToBinary from './test.base58ToBinary.js';
 import testIsJsonEncodedObject from './test.isJsonEncodedObject.js';
 import testEncodeDecode from './test.encodeDecode.js';
+import testFibeLocalTx from './test.fibeLocalTx.js';
 
 async function baseTestsInit () {
     await testLanguageSpecific ();
@@ -122,6 +123,7 @@ async function baseTestsInit () {
     testIo ();
     testIsJsonEncodedObject ();
     testEncodeDecode ();
+    await testFibeLocalTx ();
     return true;
 }
 
