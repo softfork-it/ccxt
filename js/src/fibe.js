@@ -136,11 +136,11 @@ export default class fibe extends Exchange {
         //             "lookupTable": "...",
         //             "lotSizeInBaseBaseUnits": 1000000,
         //             "marketPubkey": "...",
-        //             "marketIndex": "0",
+        //             "mi": "0",
         //             "quoteDecimals": 6,
         //             "quoteMint": "EPjFW...TDt1v",
         //             "tickSizeInQuoteBaseUnits": 100,
-        //             "marketType": "S"                // "S" spot | "P" perp
+        //             "mt": "S"                // "S" spot | "P" perp
         //         }
         //     ]
         //
@@ -158,14 +158,14 @@ export default class fibe extends Exchange {
         const quoteId = this.safeString(market, 'quoteMint');
         const base = this.safeCurrencyCode(this.safeString(parts, 0));
         const quote = this.safeCurrencyCode(this.safeString(parts, 1));
-        const marketTypeRaw = this.safeString(market, 'marketType');
-        const isPerp = (marketTypeRaw === 'P');
-        const marketIndex = this.safeString(market, 'marketIndex');
+        const mt = this.safeString(market, 'mt');
+        const isPerp = (mt === 'P');
+        const mi = this.safeString(market, 'mi');
         let idPrefix = 'spot:';
         if (isPerp) {
             idPrefix = 'perp:';
         }
-        const id = idPrefix + marketIndex;
+        const id = idPrefix + mi;
         let symbol = base + '/' + quote;
         let settle = undefined;
         let settleId = undefined;
@@ -230,7 +230,10 @@ export default class fibe extends Exchange {
                 'cost': { 'min': undefined, 'max': undefined },
             },
             'created': undefined,
-            'info': market,
+            'info': this.extend({}, market, {
+                'mi': mi,
+                'mt': mt,
+            }),
         });
     }
     async fetchBalance(params = {}) {
@@ -299,7 +302,7 @@ export default class fibe extends Exchange {
         //                 "clearinghouseState": {
         //                     "assetPositions": [
         //                         {
-        //                             "marketIndex": "1",
+        //                             "mi": "1",
         //                             "entryPx": "1.2",
         //                             "leverage": { "type": "cross", "value": 3 },
         //                             "liquidationPx": "4.5",
@@ -338,7 +341,7 @@ export default class fibe extends Exchange {
         //         "user": "11111111111111111111111111111111",
         //         "subAccountIndex": 2,
         //         "quoteMint": "11111111111111111111111111111111",
-        //         "marketIndex": "1",
+        //         "mi": "1",
         //         "entryPx": "1.2",
         //         "leverage": { "type": "cross", "value": 3 },
         //         "liquidationPx": "4.5",
@@ -352,10 +355,10 @@ export default class fibe extends Exchange {
         //         "maxLeverage": 10
         //     }
         //
-        const marketIndex = this.safeString(position, 'marketIndex');
+        const mi = this.safeString(position, 'mi');
         let marketId = undefined;
-        if (marketIndex !== undefined) {
-            marketId = 'perp:' + marketIndex;
+        if (mi !== undefined) {
+            marketId = 'perp:' + mi;
         }
         market = this.safeMarket(marketId, market);
         const leverage = this.safeDict(position, 'leverage', {});
@@ -446,22 +449,22 @@ export default class fibe extends Exchange {
         //
         //     {
         //         "time": 1781672400,
-        //         "marketIndex": "1",
-        //         "marketType": "P",
+        //         "mi": "1",
+        //         "mt": "P",
         //         "usdc": "2.3",
         //         "szi": "4.5",
         //         "fundingRate": "6.7" // funding index delta, omitted from parsed output
         //     }
         //
-        const marketIndex = this.safeString(income, 'marketIndex');
-        const marketType = this.safeString(income, 'marketType');
+        const mi = this.safeString(income, 'mi');
+        const mt = this.safeString(income, 'mt');
         let marketId = undefined;
-        if (marketIndex !== undefined) {
+        if (mi !== undefined) {
             let idPrefix = 'spot:';
-            if (marketType === 'P') {
+            if (mt === 'P') {
                 idPrefix = 'perp:';
             }
-            marketId = idPrefix + marketIndex;
+            marketId = idPrefix + mi;
         }
         market = this.safeMarket(marketId, market);
         const timestamp = this.safeTimestamp(income, 'time');
@@ -514,8 +517,8 @@ export default class fibe extends Exchange {
         const info = market['info'];
         const request = {
             'user': userAddress,
-            'marketIndex': this.safeString(info, 'marketIndex'),
-            'marketType': this.safeString(info, 'marketType', 'S'),
+            'mi': this.safeString(info, 'mi'),
+            'mt': this.safeString(info, 'mt', 'S'),
         };
         const response = await this.publicGetUserFees(this.extend(request, params));
         return {
@@ -542,7 +545,7 @@ export default class fibe extends Exchange {
         const market = this.market(symbol);
         const info = market['info'];
         const request = {
-            'marketIndex': this.safeString(info, 'marketIndex'),
+            'mi': this.safeString(info, 'mi'),
         };
         let response = undefined;
         if (market['spot']) {
@@ -641,7 +644,7 @@ export default class fibe extends Exchange {
         }
         const info = market['info'];
         const request = {
-            'marketIndex': this.safeString(info, 'marketIndex'),
+            'mi': this.safeString(info, 'mi'),
         };
         const response = await this.publicGetPerpAssetCtx(this.extend(request, params));
         return this.parseFundingRate(response, market);
@@ -728,20 +731,20 @@ export default class fibe extends Exchange {
             // the market tick (precision.price) is the finest valid step.
             priceStep = this.numberToString(market['precision']['price']);
         }
-        let marketType = 'P';
+        let mt = 'P';
         if (market['spot']) {
-            marketType = 'S';
+            mt = 'S';
         }
         const request = {
-            'marketIndex': this.safeString(info, 'marketIndex'),
-            'marketType': marketType,
+            'mi': this.safeString(info, 'mi'),
+            'mt': mt,
             'priceStep': priceStep,
         };
         const response = await this.publicGetL2book(this.extend(request, params));
         //
         //     {
-        //         "marketIndex": "1",
-        //         "marketType": "S",
+        //         "mi": "1",
+        //         "mt": "S",
         //         "ps": "100000",
         //         "bids": [ { "px": "123.40", "sz": "15.2" }, ... ],
         //         "asks": [ { "px": "123.50", "sz": "10.5" }, ... ]
@@ -773,13 +776,13 @@ export default class fibe extends Exchange {
         await this.loadMarkets();
         const market = this.market(symbol);
         const info = market['info'];
-        let marketType = 'P';
+        let mt = 'P';
         if (market['spot']) {
-            marketType = 'S';
+            mt = 'S';
         }
         const request = {
-            'marketIndex': this.safeString(info, 'marketIndex'),
-            'marketType': marketType,
+            'mi': this.safeString(info, 'mi'),
+            'mt': mt,
         };
         const response = await this.publicGetRecentMarketTrades(this.extend(request, params));
         return this.parseTrades(response, market, since, limit);
@@ -787,8 +790,8 @@ export default class fibe extends Exchange {
     parseTrade(trade, market = undefined) {
         //
         //     {
-        //         "marketIndex": "1",
-        //         "marketType": "S",
+        //         "mi": "1",
+        //         "mt": "S",
         //         "px": "1789.6",
         //         "side": "A",
         //         "sz": "0.00001",
@@ -850,13 +853,13 @@ export default class fibe extends Exchange {
                 endTimestamp = Math.min(startTimestamp + (requestLimit * duration), this.seconds());
             }
         }
-        let marketType = 'P';
+        let mt = 'P';
         if (market['spot']) {
-            marketType = 'S';
+            mt = 'S';
         }
         const request = {
-            'marketIndex': this.safeString(info, 'marketIndex'),
-            'marketType': marketType,
+            'mi': this.safeString(info, 'mi'),
+            'mt': mt,
             'startTimestamp': startTimestamp,
             'endTimestamp': endTimestamp,
             'interval': this.safeString(this.timeframes, timeframe, timeframe),
@@ -867,8 +870,8 @@ export default class fibe extends Exchange {
     parseOHLCV(ohlcv, market = undefined) {
         //
         //     {
-        //         "marketIndex": "1",
-        //         "marketType": "S",
+        //         "mi": "1",
+        //         "mt": "S",
         //         "t": 1781670900,
         //         "T": 1781670959,
         //         "o": "1793.6",
@@ -956,11 +959,11 @@ export default class fibe extends Exchange {
     async fetchCreateOrderMarketReferencePrice(market) {
         const allMids = await this.publicGetAllMids();
         const marketInfo = market['info'];
-        const marketIndex = this.safeString(marketInfo, 'marketIndex');
-        const marketType = this.safeString(marketInfo, 'marketType');
+        const mi = this.safeString(marketInfo, 'mi');
+        const mt = this.safeString(marketInfo, 'mt');
         for (let i = 0; i < allMids.length; i++) {
             const mid = allMids[i];
-            if ((this.safeString(mid, 'marketIndex') === marketIndex) && (this.safeString(mid, 'marketType') === marketType)) {
+            if ((this.safeString(mid, 'mi') === mi) && (this.safeString(mid, 'mt') === mt)) {
                 const referencePrice = this.safeString(mid, 'mid');
                 if (referencePrice !== undefined) {
                     return referencePrice;
@@ -1155,7 +1158,7 @@ export default class fibe extends Exchange {
             'symbol': symbol,
             'type': orderType,
             'timeInForce': this.parseOrderTimeInForce(fibeTimeInForce),
-            'postOnly': (fibeTimeInForce === 'PostOnly'),
+            'postOnly': (fibeTimeInForce === 'ALO'),
             'reduceOnly': undefined,
             'side': orderSide,
             'price': isLimitOrder ? priceString : undefined,
@@ -1279,11 +1282,11 @@ export default class fibe extends Exchange {
     parseOrder(order, market = undefined) {
         //
         //     {
-        //         "marketIndex": "1",
-        //         "marketType": "S",
+        //         "mi": "1",
+        //         "mt": "S",
         //         "oid": "1",
         //         "type": "L",
-        //         "timeInForce": "PostOnly",
+        //         "timeInForce": "ALO",
         //         "px": "1",
         //         "side": "B",
         //         "origSz": "1",
@@ -1294,15 +1297,15 @@ export default class fibe extends Exchange {
         //         "updatedAt": 1
         //     }
         //
-        const marketIndex = this.safeString(order, 'marketIndex');
-        const marketType = this.safeString(order, 'marketType');
+        const mi = this.safeString(order, 'mi');
+        const mt = this.safeString(order, 'mt');
         let marketId = undefined;
-        if (marketIndex !== undefined) {
+        if (mi !== undefined) {
             let idPrefix = 'spot:';
-            if (marketType === 'P') {
+            if (mt === 'P') {
                 idPrefix = 'perp:';
             }
-            marketId = idPrefix + marketIndex;
+            marketId = idPrefix + mi;
         }
         market = this.safeMarket(marketId, market);
         const timestamp = this.parseOrderTimestamp(order, 'createdAt');
@@ -1345,7 +1348,7 @@ export default class fibe extends Exchange {
         }, market);
     }
     fibeProgramId() {
-        return 'G691tDoMnLq8Vvebbv8JqkeUkzpzBWWzxfqFcHeBh7t6';
+        return '6PT55fr2S7SoT8khi53A98ADV8ShuSeUUwtvgigPJBnz';
     }
     solanaSystemProgramId() {
         return '11111111111111111111111111111111';
@@ -1766,10 +1769,10 @@ export default class fibe extends Exchange {
     }
     fibeTimeInForceIndex(timeInForce) {
         const values = {
-            'Gtc': 0,
-            'Ioc': 1,
-            'PostOnly': 2,
-            'Fok': 3,
+            'GTC': 0,
+            'IOC': 1,
+            'ALO': 2,
+            'FOK': 3,
         };
         return this.safeInteger(values, timeInForce);
     }
@@ -2097,8 +2100,15 @@ export default class fibe extends Exchange {
     fibeGetOrderPda(owner, subAccountIndex, orderId) {
         return this.fibePda([this.solanaStringHex('order_cid'), this.solanaPubkeyHex(owner), this.solanaU8Hex(subAccountIndex), this.solanaU64leHex(orderId)]);
     }
-    fibeGetSpotMarketVaultPda(marketIndex, tokenMint) {
-        return this.fibePda([this.solanaStringHex('spot_vault'), this.solanaU64leHex(marketIndex), this.solanaPubkeyHex(tokenMint)]);
+    fibeGetOpenOrdersPerMarketPda(mt, owner, subAccountIndex, mi) {
+        let marketSeed = 'perp';
+        if (mt === 'S') {
+            marketSeed = 'spot';
+        }
+        return this.fibePda([this.solanaStringHex(marketSeed), this.solanaStringHex('open_orders_per_market'), this.solanaPubkeyHex(owner), this.solanaU8Hex(subAccountIndex), this.solanaU64leHex(mi)]);
+    }
+    fibeGetSpotMarketVaultPda(mi, tokenMint) {
+        return this.fibePda([this.solanaStringHex('spot_vault'), this.solanaU64leHex(mi), this.solanaPubkeyHex(tokenMint)]);
     }
     fibeGetPerpMarketVaultPda(tokenMint) {
         return this.fibePda([this.solanaStringHex('perp_vault'), this.solanaPubkeyHex(tokenMint)]);
@@ -2106,12 +2116,12 @@ export default class fibe extends Exchange {
     fibeGetVaultAuthorityPda() {
         return this.fibePda([this.solanaStringHex('vault_authority')]);
     }
-    fibeGetHfmmRegistryPda(marketType, marketIndex) {
-        let seed = 'perp_hfmm_market_registry';
-        if (marketType === 'S') {
-            seed = 'spot_hfmm_market_registry';
+    fibeGetHfmmRegistryPda(mt, mi) {
+        let marketSeed = 'perp';
+        if (mt === 'S') {
+            marketSeed = 'spot';
         }
-        return this.fibePda([this.solanaStringHex(seed), this.solanaU64leHex(marketIndex)]);
+        return this.fibePda([this.solanaStringHex(marketSeed), this.solanaStringHex('hfmm_market_registry'), this.solanaU64leHex(mi)]);
     }
     fibeGetPerpControlParamsPda(quoteMint) {
         return this.fibePda([this.solanaStringHex('perp_control_params'), this.solanaPubkeyHex(quoteMint)]);
@@ -2119,14 +2129,14 @@ export default class fibe extends Exchange {
     fibeGetHfmmMarginAccountsPda(quoteMint) {
         return this.fibePda([this.solanaStringHex('hfmm_margin_accounts'), this.solanaPubkeyHex(quoteMint)]);
     }
-    fibeGetTickArrayPda(marketType, marketIndex, priceInTicks) {
-        let seed = 'perp_tick_array';
-        if (marketType === 'S') {
-            seed = 'spot_tick_array';
+    fibeGetTickArrayPda(mt, mi, priceInTicks) {
+        let marketSeed = 'perp';
+        if (mt === 'S') {
+            marketSeed = 'spot';
         }
         const arrayStartTick = this.fibeGetTickArrayStartTick(priceInTicks);
         const division = this.fibeDecimalStringDivmod(arrayStartTick, 100);
-        return this.fibePda([this.solanaStringHex(seed), this.solanaU64leHex(marketIndex), this.solanaU64leHex(this.safeString(division, 'quotient'))]);
+        return this.fibePda([this.solanaStringHex(marketSeed), this.solanaStringHex('tick_array'), this.solanaU64leHex(mi), this.solanaU64leHex(this.safeString(division, 'quotient'))]);
     }
     fibeMaxTick() {
         return 1638400;
@@ -2140,6 +2150,13 @@ export default class fibe extends Exchange {
     solanaReadU64FromHex(hex, offset) {
         const start = offset * 2;
         return this.solanaLeHexToDecimalString(hex.slice(start, start + 16));
+    }
+    solanaReadU32FromHex(hex, offset) {
+        const start = offset * 2;
+        return this.solanaLeHexToDecimalString(hex.slice(start, start + 8));
+    }
+    solanaReadU8FromHex(hex, offset) {
+        return this.solanaHexByte(hex, offset * 2);
     }
     solanaReadI8FromHex(hex, offset) {
         const byteValue = this.solanaHexByte(hex, offset * 2);
@@ -2156,16 +2173,16 @@ export default class fibe extends Exchange {
             'bidTickUpperBound': this.solanaReadU64FromHex(hex, bitmapOffset + 2056),
         };
     }
-    fibeTickArrayStride(marketType) {
-        if (marketType === 'S') {
+    fibeTickArrayStride(mt) {
+        if (mt === 'S') {
             return 64;
         }
         return 80;
     }
-    fibeDecodeTickArrayState(marketType, data) {
+    fibeDecodeTickArrayState(mt, data) {
         const hex = this.binaryToBase16(data);
         const startTick = parseInt(this.solanaReadU64FromHex(hex, 24));
-        const tickStride = this.fibeTickArrayStride(marketType);
+        const tickStride = this.fibeTickArrayStride(mt);
         const ticks = [];
         for (let i = 0; i < this.fibeTickSizeInArray(); i++) {
             const offset = 32 + (i * tickStride);
@@ -2214,11 +2231,11 @@ export default class fibe extends Exchange {
     async fibeGetTickArrayStates(rpcUrl, market, pubkeys, commitment = 'confirmed') {
         const states = [];
         const accounts = await this.solanaGetMultipleAccountData(rpcUrl, pubkeys, commitment);
-        const marketType = this.safeString(market, 'marketType');
+        const mt = this.safeString(market, 'mt');
         for (let i = 0; i < accounts.length; i++) {
             const data = accounts[i];
             if (data !== undefined) {
-                states.push(this.fibeDecodeTickArrayState(marketType, data));
+                states.push(this.fibeDecodeTickArrayState(mt, data));
             }
         }
         return states;
@@ -2375,8 +2392,8 @@ export default class fibe extends Exchange {
     }
     async fibeGetTickArraysForOrder(rpcUrl, market, priceInTicks, sizeInBase, side, commitment) {
         const priceInTicksNumber = parseInt(priceInTicks);
-        const marketType = this.safeString(market, 'marketType');
-        const marketIndex = this.safeString(market, 'marketIndex');
+        const mt = this.safeString(market, 'mt');
+        const mi = this.safeString(market, 'mi');
         const marketData = await this.solanaGetAccountData(rpcUrl, this.safeString(market, 'marketPubkey'), commitment);
         const bitmap = this.fibeDecodeTickArrayBitmap(marketData);
         const baseLots = this.fibeDecimalStringCeilDivSmall(sizeInBase, parseInt(this.safeString(market, 'lotSizeInBaseBaseUnits')));
@@ -2391,14 +2408,14 @@ export default class fibe extends Exchange {
             }
             for (let i = 0; i < buyCandidateCount; i++) {
                 const index = lowestAskStart + (i * buyTickSize);
-                candidates.push(this.fibeGetTickArrayPda(marketType, marketIndex, this.numberToString(index)));
+                candidates.push(this.fibeGetTickArrayPda(mt, mi, this.numberToString(index)));
             }
             const buyStates = await this.fibeGetTickArrayStates(rpcUrl, market, candidates, commitment);
             const buyIndexes = this.fibeFindTickArrayIndexesForOrder(buyStates, priceInTicksNumber, baseLots, side);
             const buyAllIndexes = this.fibeGetAllTickArrayIndexesForBid(priceInTicksNumber, buyIndexes);
             const buyResult = [];
             for (let i = 0; i < buyAllIndexes.length; i++) {
-                buyResult.push(this.fibeGetTickArrayPda(marketType, marketIndex, this.numberToString(buyAllIndexes[i])));
+                buyResult.push(this.fibeGetTickArrayPda(mt, mi, this.numberToString(buyAllIndexes[i])));
             }
             return buyResult;
         }
@@ -2411,14 +2428,14 @@ export default class fibe extends Exchange {
         }
         for (let i = 0; i < sellCandidateCount; i++) {
             const index = fromIndex + (i * sellTickSize);
-            candidates.push(this.fibeGetTickArrayPda(marketType, marketIndex, this.numberToString(index)));
+            candidates.push(this.fibeGetTickArrayPda(mt, mi, this.numberToString(index)));
         }
         const sellStates = await this.fibeGetTickArrayStates(rpcUrl, market, candidates, commitment);
         const sellIndexes = this.fibeFindTickArrayIndexesForOrder(sellStates, priceInTicksNumber, baseLots, side);
         const sellAllIndexes = this.fibeGetAllTickArrayIndexesForAsk(priceInTicksNumber, sellIndexes);
         const sellResult = [];
         for (let i = 0; i < sellAllIndexes.length; i++) {
-            sellResult.push(this.fibeGetTickArrayPda(marketType, marketIndex, this.numberToString(sellAllIndexes[i])));
+            sellResult.push(this.fibeGetTickArrayPda(mt, mi, this.numberToString(sellAllIndexes[i])));
         }
         return sellResult;
     }
@@ -2490,8 +2507,9 @@ export default class fibe extends Exchange {
         const accounts = [
             this.solanaAccount(this.solanaSystemProgramId()),
             this.solanaAccount(input['owner'], true, true),
+            this.solanaAccount(input['ownerSubAccountState'], true),
             this.solanaAccount(input['ownerState'], true),
-            this.solanaAccount(input['order'], true),
+            this.solanaAccount(input['openOrdersPerMarket'], true),
             this.solanaAccount(this.fibeProgramId()),
             this.solanaAccount(this.fibeProgramId()),
             this.solanaAccount(this.fibeProgramId()),
@@ -2525,8 +2543,9 @@ export default class fibe extends Exchange {
             'accounts': [
                 this.solanaAccount(input['market'], true),
                 this.solanaAccount(input['owner'], true, true),
+                this.solanaAccount(input['ownerSubAccountState'], true),
                 this.solanaAccount(input['ownerState'], true),
-                this.solanaAccount(input['order'], true),
+                this.solanaAccount(input['openOrdersPerMarket'], true),
                 this.solanaAccount(input['tickArray'], true),
                 this.solanaAccount(input['ownerBaseTokenAccount'], true),
                 this.solanaAccount(input['ownerQuoteTokenAccount'], true),
@@ -2568,11 +2587,11 @@ export default class fibe extends Exchange {
         const accounts = [
             this.solanaAccount(this.solanaSystemProgramId()),
             this.solanaAccount(input['market'], true),
-            this.solanaAccount(input['ownerSubAccountState']),
+            this.solanaAccount(input['ownerSubAccountState'], true),
             this.solanaAccount(input['ownerOrDelegate'], true, true),
             this.solanaAccount(input['ownerState'], true),
             this.solanaAccount(input['ownerMarginAccount'], true),
-            this.solanaAccount(input['order'], true),
+            this.solanaAccount(input['openOrdersPerMarket'], true),
             ownerOrDelegateQuoteTokenAccount,
             this.solanaAccount(this.fibeProgramId()),
             this.solanaAccount(this.fibeProgramId()),
@@ -2602,11 +2621,11 @@ export default class fibe extends Exchange {
             'programId': this.fibeProgramId(),
             'accounts': [
                 this.solanaAccount(input['market'], true),
-                this.solanaAccount(input['ownerSubAccountState']),
+                this.solanaAccount(input['ownerSubAccountState'], true),
                 this.solanaAccount(input['ownerOrDelegate'], true, true),
                 this.solanaAccount(input['ownerState'], true),
                 this.solanaAccount(input['ownerMarginAccount'], true),
-                this.solanaAccount(input['order'], true),
+                this.solanaAccount(input['openOrdersPerMarket'], true),
                 this.solanaAccount(input['perpControlParams']),
                 this.solanaAccount(input['tokenVaultQuote'], true),
                 this.solanaAccount(input['vaultAuthority']),
@@ -2764,14 +2783,29 @@ export default class fibe extends Exchange {
         const start = offset * 2;
         return this.solanaLeHexToDecimalString(hex.slice(start, start + 16));
     }
+    fibeReadOpenOrderPriceInTicks(data, mt, orderId) {
+        const hex = this.binaryToBase16(data);
+        const orderCount = parseInt(this.solanaReadU32FromHex(hex, 60));
+        const orderSize = (mt === 'S') ? 144 : 160;
+        let offset = 64;
+        for (let i = 0; i < orderCount; i++) {
+            const clientOrderId = this.solanaReadU64FromHex(hex, offset + 40);
+            const stateBit = this.solanaReadU8FromHex(hex, offset + 69);
+            if ((clientOrderId === orderId) && (stateBit === 1)) {
+                return this.solanaReadU64FromHex(hex, offset + 56);
+            }
+            offset = offset + orderSize;
+        }
+        throw new ExchangeError(this.id + ' cancelOrder() could not find open order ' + orderId);
+    }
     async fibeLocalTxCreateOrder(params) {
         const market = this.fibeTxParseMarket(params['market']);
         if ((market['baseMint'] === this.solanaNativeMint()) || (market['quoteMint'] === this.solanaNativeMint())) {
             throw new ExchangeError(this.id + ' local Fibe transaction construction does not support native SOL wrapping');
         }
-        const marketType = this.safeString(market, 'marketType');
+        const mt = this.safeString(market, 'mt');
         let marginMode = this.safeString(params, 'marginMode', 'cross');
-        if (marketType === 'P') {
+        if (mt === 'P') {
             marginMode = this.fibeNormalizeMarginMode('createOrder', marginMode);
         }
         const owner = this.safeString(params, 'user');
@@ -2779,13 +2813,14 @@ export default class fibe extends Exchange {
         const orderId = this.safeString(params, 'orderId');
         const priceInTicks = this.fibePriceToTicks(this.safeString(params, 'price'), this.safeInteger(market, 'quoteDecimals'), this.safeString(market, 'tickSizeInQuoteBaseUnits'), this.safeString(params, 'side'), this.safeNumber(params, 'slippage'));
         const sizeInBase = this.fibeNormalizeQuantity(this.fibeDecimalToUnits(this.safeString(params, 'amount'), this.safeInteger(market, 'baseDecimals')), this.safeString(market, 'lotSizeInBaseBaseUnits'));
-        const orderTickArray = this.fibeGetTickArrayPda(this.safeString(market, 'marketType'), this.safeString(market, 'marketIndex'), priceInTicks);
+        const orderTickArray = this.fibeGetTickArrayPda(this.safeString(market, 'mt'), this.safeString(market, 'mi'), priceInTicks);
+        const openOrdersPerMarket = this.fibeGetOpenOrdersPerMarketPda(mt, owner, (mt === 'S') ? 0 : this.safeInteger(params, 'subAccountIndex', 0), this.safeString(market, 'mi'));
         const rpcUrl = this.safeString(params, 'rpcUrl');
         const commitment = this.safeString(params, 'commitment', 'confirmed');
         const tickArrays = await this.fibeGetTickArraysForOrder(rpcUrl, market, priceInTicks, sizeInBase, this.safeString(params, 'side'), commitment);
         const tokenProgramQuote = await this.solanaGetTokenProgram(rpcUrl, this.safeString(market, 'quoteMint'), this.safeString(market, 'tokenProgramQuote'), commitment);
         const ixs = [];
-        if (marketType === 'S') {
+        if (mt === 'S') {
             const tokenProgramBase = await this.solanaGetTokenProgram(rpcUrl, this.safeString(market, 'baseMint'), this.safeString(market, 'tokenProgramBase'), commitment);
             const ownerBaseTokenAccount = this.solanaGetAssociatedTokenAddress(this.safeString(market, 'baseMint'), owner, tokenProgramBase);
             const ownerQuoteTokenAccount = this.solanaGetAssociatedTokenAddress(this.safeString(market, 'quoteMint'), owner, tokenProgramQuote);
@@ -2803,15 +2838,16 @@ export default class fibe extends Exchange {
             }
             ixs.push(this.fibeSpotPlaceOrderIx({
                 'owner': owner,
+                'ownerSubAccountState': this.fibeGetSubAccountStatePda(owner, 0),
                 'ownerState': this.fibeGetUserStatePda(owner),
-                'order': this.fibeGetOrderPda(owner, 0, orderId),
+                'openOrdersPerMarket': openOrdersPerMarket,
                 'ownerBaseTokenAccount': ownerBaseTokenAccount,
                 'ownerQuoteTokenAccount': ownerQuoteTokenAccount,
                 'market': this.safeString(market, 'marketPubkey'),
-                'tokenVaultBase': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'marketIndex'), this.safeString(market, 'baseMint')),
-                'tokenVaultQuote': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'marketIndex'), this.safeString(market, 'quoteMint')),
+                'tokenVaultBase': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'mi'), this.safeString(market, 'baseMint')),
+                'tokenVaultQuote': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'mi'), this.safeString(market, 'quoteMint')),
                 'vaultAuthority': this.fibeGetVaultAuthorityPda(),
-                'hfmmRegistry': this.fibeGetHfmmRegistryPda('S', this.safeString(market, 'marketIndex')),
+                'hfmmRegistry': this.fibeGetHfmmRegistryPda('S', this.safeString(market, 'mi')),
                 'tokenMintBase': this.safeString(market, 'baseMint'),
                 'tokenMintQuote': this.safeString(market, 'quoteMint'),
                 'tokenProgramBase': tokenProgramBase,
@@ -2845,14 +2881,14 @@ export default class fibe extends Exchange {
                 'ownerSubAccountState': this.fibeGetSubAccountStatePda(owner, subAccountIndex),
                 'ownerState': this.fibeGetUserStatePda(owner),
                 'ownerMarginAccount': this.fibeGetUserMarginAccountPda(owner, subAccountIndex, this.safeString(market, 'quoteMint')),
-                'order': this.fibeGetOrderPda(owner, subAccountIndex, orderId),
+                'openOrdersPerMarket': openOrdersPerMarket,
                 'ownerOrDelegateQuoteTokenAccount': ownerQuoteTokenAccount,
                 'market': this.safeString(market, 'marketPubkey'),
                 'perpControlParams': this.fibeGetPerpControlParamsPda(this.safeString(market, 'quoteMint')),
                 'hfmmMarginAccounts': this.fibeGetHfmmMarginAccountsPda(this.safeString(market, 'quoteMint')),
                 'tokenVaultQuote': this.fibeGetPerpMarketVaultPda(this.safeString(market, 'quoteMint')),
                 'vaultAuthority': this.fibeGetVaultAuthorityPda(),
-                'hfmmRegistry': this.fibeGetHfmmRegistryPda('P', this.safeString(market, 'marketIndex')),
+                'hfmmRegistry': this.fibeGetHfmmRegistryPda('P', this.safeString(market, 'mi')),
                 'tokenMintQuote': this.safeString(market, 'quoteMint'),
                 'tokenProgramQuote': tokenProgramQuote,
                 'priceInTicks': priceInTicks,
@@ -2869,10 +2905,10 @@ export default class fibe extends Exchange {
         }
         const result = await this.solanaSignAndSend(rpcUrl, owner, privateKeyHex, ixs, params);
         let orderSubAccountIndex = this.safeInteger(params, 'subAccountIndex', 0);
-        if (this.safeString(market, 'marketType') === 'S') {
+        if (this.safeString(market, 'mt') === 'S') {
             orderSubAccountIndex = 0;
         }
-        result['orderPda'] = this.fibeGetOrderPda(owner, orderSubAccountIndex, orderId);
+        result['openOrdersPerMarket'] = this.fibeGetOpenOrdersPerMarketPda(mt, owner, orderSubAccountIndex, this.safeString(market, 'mi'));
         result['priceInTicks'] = priceInTicks;
         result['tickArray'] = orderTickArray;
         result['tickArrays'] = tickArrays;
@@ -2887,29 +2923,30 @@ export default class fibe extends Exchange {
         const privateKeyHex = this.solanaParsePrivateKeyHex(this.safeString(params, 'privateKey'), owner);
         const orderId = this.safeString(params, 'orderId');
         let subAccountIndex = this.safeInteger(params, 'subAccountIndex', 0);
-        if (this.safeString(market, 'marketType') === 'S') {
+        if (this.safeString(market, 'mt') === 'S') {
             subAccountIndex = 0;
         }
-        const order = this.fibeGetOrderPda(owner, subAccountIndex, orderId);
+        const openOrdersPerMarket = this.fibeGetOpenOrdersPerMarketPda(this.safeString(market, 'mt'), owner, subAccountIndex, this.safeString(market, 'mi'));
         const rpcUrl = this.safeString(params, 'rpcUrl');
         const commitment = this.safeString(params, 'commitment', 'confirmed');
-        const orderAccount = await this.solanaGetAccountData(rpcUrl, order, commitment);
-        const priceInTicks = this.solanaReadU64(orderAccount, 64);
-        const tickArray = this.fibeGetTickArrayPda(this.safeString(market, 'marketType'), this.safeString(market, 'marketIndex'), priceInTicks);
+        const openOrdersAccount = await this.solanaGetAccountData(rpcUrl, openOrdersPerMarket, commitment);
+        const priceInTicks = this.fibeReadOpenOrderPriceInTicks(openOrdersAccount, this.safeString(market, 'mt'), orderId);
+        const tickArray = this.fibeGetTickArrayPda(this.safeString(market, 'mt'), this.safeString(market, 'mi'), priceInTicks);
         let ix = undefined;
-        if (this.safeString(market, 'marketType') === 'S') {
+        if (this.safeString(market, 'mt') === 'S') {
             const tokenProgramBase = await this.solanaGetTokenProgram(rpcUrl, this.safeString(market, 'baseMint'), this.safeString(market, 'tokenProgramBase'), commitment);
             const tokenProgramQuote = await this.solanaGetTokenProgram(rpcUrl, this.safeString(market, 'quoteMint'), this.safeString(market, 'tokenProgramQuote'), commitment);
             ix = this.fibeSpotCloseRestingOrderIx({
                 'owner': owner,
+                'ownerSubAccountState': this.fibeGetSubAccountStatePda(owner, 0),
                 'ownerState': this.fibeGetUserStatePda(owner),
-                'order': order,
+                'openOrdersPerMarket': openOrdersPerMarket,
                 'tickArray': tickArray,
                 'ownerBaseTokenAccount': this.solanaGetAssociatedTokenAddress(this.safeString(market, 'baseMint'), owner, tokenProgramBase),
                 'ownerQuoteTokenAccount': this.solanaGetAssociatedTokenAddress(this.safeString(market, 'quoteMint'), owner, tokenProgramQuote),
                 'market': this.safeString(market, 'marketPubkey'),
-                'tokenVaultBase': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'marketIndex'), this.safeString(market, 'baseMint')),
-                'tokenVaultQuote': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'marketIndex'), this.safeString(market, 'quoteMint')),
+                'tokenVaultBase': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'mi'), this.safeString(market, 'baseMint')),
+                'tokenVaultQuote': this.fibeGetSpotMarketVaultPda(this.safeString(market, 'mi'), this.safeString(market, 'quoteMint')),
                 'vaultAuthority': this.fibeGetVaultAuthorityPda(),
                 'tokenMintBase': this.safeString(market, 'baseMint'),
                 'tokenMintQuote': this.safeString(market, 'quoteMint'),
@@ -2925,7 +2962,7 @@ export default class fibe extends Exchange {
                 'ownerOrDelegate': owner,
                 'ownerState': this.fibeGetUserStatePda(owner),
                 'ownerMarginAccount': this.fibeGetUserMarginAccountPda(owner, subAccountIndex, this.safeString(market, 'quoteMint')),
-                'order': order,
+                'openOrdersPerMarket': openOrdersPerMarket,
                 'perpControlParams': this.fibeGetPerpControlParamsPda(this.safeString(market, 'quoteMint')),
                 'tokenVaultQuote': this.fibeGetPerpMarketVaultPda(this.safeString(market, 'quoteMint')),
                 'vaultAuthority': this.fibeGetVaultAuthorityPda(),
@@ -2934,20 +2971,20 @@ export default class fibe extends Exchange {
             });
         }
         const result = await this.solanaSignAndSend(rpcUrl, owner, privateKeyHex, [ix], params);
-        result['orderPda'] = order;
+        result['openOrdersPerMarket'] = openOrdersPerMarket;
         result['priceInTicks'] = priceInTicks;
         result['tickArray'] = tickArray;
         return result;
     }
     fibeTxParseMarket(market) {
         const info = this.safeDict(market, 'info', {});
-        let marketType = 'P';
+        let mt = 'P';
         if (this.safeBool(market, 'spot')) {
-            marketType = 'S';
+            mt = 'S';
         }
         return {
-            'marketType': marketType,
-            'marketIndex': this.safeString(info, 'marketIndex'),
+            'mt': mt,
+            'mi': this.safeString(info, 'mi'),
             'marketPubkey': this.safeString(info, 'marketPubkey'),
             'baseMint': this.safeString(info, 'baseMint'),
             'quoteMint': this.safeString(info, 'quoteMint'),
@@ -3086,10 +3123,10 @@ export default class fibe extends Exchange {
     }
     parseOrderTimeInForce(timeInForce) {
         const timeInForces = {
-            'Gtc': 'GTC',
-            'Ioc': 'IOC',
-            'Fok': 'FOK',
-            'PostOnly': 'PO',
+            'GTC': 'GTC',
+            'IOC': 'IOC',
+            'FOK': 'FOK',
+            'ALO': 'PO',
         };
         return this.safeString(timeInForces, timeInForce, timeInForce);
     }
@@ -3099,24 +3136,25 @@ export default class fibe extends Exchange {
             if (timeInForce !== undefined) {
                 upperTimeInForce = this.numberToString(timeInForce).toUpperCase();
             }
-            if ((upperTimeInForce !== undefined) && (upperTimeInForce !== 'PO')) {
+            if ((upperTimeInForce !== undefined) && (upperTimeInForce !== 'PO') && (upperTimeInForce !== 'ALO')) {
                 throw new InvalidOrder(this.id + ' createOrder() postOnly cannot be combined with timeInForce ' + timeInForce);
             }
-            return 'PostOnly';
+            return 'ALO';
         }
         if (timeInForce === undefined) {
-            return 'Gtc';
+            return 'GTC';
         }
         const upper = this.numberToString(timeInForce).toUpperCase();
         const timeInForces = {
-            'GTC': 'Gtc',
-            'IOC': 'Ioc',
-            'PO': 'PostOnly',
-            'FOK': 'Fok',
+            'GTC': 'GTC',
+            'IOC': 'IOC',
+            'PO': 'ALO',
+            'ALO': 'ALO',
+            'FOK': 'FOK',
         };
         const result = this.safeString(timeInForces, upper);
         if (result === undefined) {
-            throw new InvalidOrder(this.id + ' createOrder() local transaction construction supports timeInForce GTC, IOC, PO, or FOK');
+            throw new InvalidOrder(this.id + ' createOrder() local transaction construction supports timeInForce GTC, IOC, PO/ALO, or FOK');
         }
         return result;
     }

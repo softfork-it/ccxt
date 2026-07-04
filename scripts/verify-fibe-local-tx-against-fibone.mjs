@@ -90,10 +90,11 @@ function sideToFibe (side) {
 function timeInForceToFibe (timeInForce) {
     const value = String (timeInForce ?? 'GTC').toUpperCase ();
     const mapping = {
-        GTC: 'Gtc',
-        IOC: 'Ioc',
-        FOK: 'Fok',
-        PO: 'PostOnly',
+        GTC: 'GTC',
+        IOC: 'IOC',
+        FOK: 'FOK',
+        PO: 'ALO',
+        ALO: 'ALO',
     };
     const result = mapping[value];
     assert.ok (result, `unsupported timeInForce ${timeInForce}`);
@@ -445,8 +446,8 @@ async function assertCreateOrderMatchesFibone (exchange, fiboneUrl, scenario) {
     ));
     const request = compact ({
         owner: exchange.walletAddress,
-        marketType: market.info.marketType,
-        marketIndex: market.info.marketIndex,
+        mt: market.info.mt,
+        mi: market.info.mi,
         orderId,
         side: sideToFibe (side),
         price,
@@ -536,8 +537,8 @@ async function assertCancelOrderMatchesFibone (exchange, fiboneUrl, symbol, opti
     ));
     const request = compact ({
         owner: exchange.walletAddress,
-        marketType: market.info.marketType,
-        marketIndex: market.info.marketIndex,
+        mt: market.info.mt,
+        mi: market.info.mi,
         orderId: cancelInput.orderId,
         subAccountIndex: market.swap ? subAccountIndex : undefined,
         computeUnitLimit,

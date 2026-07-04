@@ -5,6 +5,7 @@
 .vs
 .vscode
 build/ccxt.wiki
+wiki/
 node_modules/
 npm-debug.log
 .DS_Store

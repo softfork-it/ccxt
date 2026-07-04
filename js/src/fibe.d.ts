@@ -110,24 +110,27 @@ export default class fibe extends Exchange {
     fibeGetSubAccountStatePda(owner: any, subAccountIndex: any): string;
     fibeGetUserMarginAccountPda(owner: any, subAccountIndex: any, quoteMint: any): string;
     fibeGetOrderPda(owner: any, subAccountIndex: any, orderId: any): string;
-    fibeGetSpotMarketVaultPda(marketIndex: any, tokenMint: any): string;
+    fibeGetOpenOrdersPerMarketPda(mt: any, owner: any, subAccountIndex: any, mi: any): string;
+    fibeGetSpotMarketVaultPda(mi: any, tokenMint: any): string;
     fibeGetPerpMarketVaultPda(tokenMint: any): string;
     fibeGetVaultAuthorityPda(): string;
-    fibeGetHfmmRegistryPda(marketType: any, marketIndex: any): string;
+    fibeGetHfmmRegistryPda(mt: any, mi: any): string;
     fibeGetPerpControlParamsPda(quoteMint: any): string;
     fibeGetHfmmMarginAccountsPda(quoteMint: any): string;
-    fibeGetTickArrayPda(marketType: any, marketIndex: any, priceInTicks: any): string;
+    fibeGetTickArrayPda(mt: any, mi: any, priceInTicks: any): string;
     fibeMaxTick(): number;
     fibeTickSizeInArray(): number;
     fibeMarketTickArrayBitmapOffset(): number;
     solanaReadU64FromHex(hex: any, offset: any): any;
+    solanaReadU32FromHex(hex: any, offset: any): any;
+    solanaReadU8FromHex(hex: any, offset: any): number;
     solanaReadI8FromHex(hex: any, offset: any): number;
     fibeDecodeTickArrayBitmap(marketData: any): {
         askTickLowerBound: any;
         bidTickUpperBound: any;
     };
-    fibeTickArrayStride(marketType: any): 64 | 80;
-    fibeDecodeTickArrayState(marketType: any, data: any): {
+    fibeTickArrayStride(mt: any): 64 | 80;
+    fibeDecodeTickArrayState(mt: any, data: any): {
         startTick: number;
         ticks: any[];
     };
@@ -211,11 +214,12 @@ export default class fibe extends Exchange {
         transaction: string;
     };
     solanaReadU64(data: any, offset: any): any;
+    fibeReadOpenOrderPriceInTicks(data: any, mt: any, orderId: any): any;
     fibeLocalTxCreateOrder(params: any): Promise<Dict>;
     fibeLocalTxCancelOrder(params: any): Promise<Dict>;
     fibeTxParseMarket(market: any): {
-        marketType: string;
-        marketIndex: string;
+        mt: string;
+        mi: string;
         marketPubkey: string;
         baseMint: string;
         quoteMint: string;

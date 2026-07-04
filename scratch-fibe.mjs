@@ -13,12 +13,24 @@
 //     node scratch-fibe.mjs fetchTradingFee
 //     FIBE_USER=... node scratch-fibe.mjs fetchPositions
 //     FIBE_USER=... node scratch-fibe.mjs fetchFundingHistory
+//     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_SIDE=buy FIBE_AMOUNT=0.01 FIBE_PRICE=1000 node scratch-fibe.mjs createOrder
+//     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_ORDER_ID=... node scratch-fibe.mjs cancelOrder
+//     FIBE_USER=... FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC node scratch-fibe.mjs inspectLocalOrderTx
+//     FIBE_ENABLE_TRADING=1 FIBE_USER=... FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC node scratch-fibe.mjs liveCreateCancelOrder
+//     FIBE_ENABLE_TRADING=1 FIBE_USER=... FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC node scratch-fibe.mjs liveFailureChecks
 //
 // If `js/ccxt.js` doesn't exist yet, run a full `npm run build` once.
 
 import ccxt from './js/ccxt.js';
 
-const fibe = new ccxt.fibe ({ timeout: 20000 });
+const fibe = new ccxt.fibe ({
+    timeout: 20000,
+    walletAddress: process.env.FIBE_USER,
+    privateKey: process.env.FIBE_PRIVATE_KEY,
+    options: {
+        rpcUrl: process.env.FIBE_RPC_URL || 'https://api.devnet.solana.com',
+    },
+});
 const available = [
     'fetchMarkets',
     'market',
@@ -35,7 +47,29 @@ const available = [
     'fetchTradingFee',
     'fetchOpenOrders',
     'fetchOrders',
+    'createOrder',
+    'cancelOrder',
+    'inspectLocalOrderTx',
+    'liveCreateCancelOrder',
+    'liveFailureChecks',
 ];
+const defaultTargets = new Set ([
+    'fetchMarkets',
+    'market',
+    'fetchTicker',
+    'fetchTickers',
+    'fetchOrderBook',
+    'fetchTrades',
+    'fetchOHLCV',
+    'fetchBalance',
+    'fetchPositions',
+    'fetchFundingRate',
+    'fetchFundingRates',
+    'fetchFundingHistory',
+    'fetchTradingFee',
+    'fetchOpenOrders',
+    'fetchOrders',
+]);
 const selected = new Set (process.argv.slice (2));
 const unknown = [ ...selected ].filter ((name) => !available.includes (name));
 if (unknown.length > 0) {
@@ -51,12 +85,231 @@ function assert (condition, message) {
 }
 
 function shouldRun (name) {
-    return selected.size === 0 || selected.has (name);
+    if (selected.size === 0) {
+        return defaultTargets.has (name);
+    }
+    return selected.has (name);
 }
 
 function print (name, value) {
     console.log ('\n' + name + ':');
     console.dir (value, { depth: null });
+}
+
+function env (name) {
+    const value = process.env[name];
+    assert (value !== undefined && value !== '', 'missing ' + name);
+    return value;
+}
+
+function requireTradingEnabled () {
+    assert (process.env.FIBE_ENABLE_TRADING === '1', 'set FIBE_ENABLE_TRADING=1 to run trading functions');
+}
+
+function requirePrivateKey () {
+    assert (process.env.FIBE_PRIVATE_KEY !== undefined && process.env.FIBE_PRIVATE_KEY !== '', 'missing FIBE_PRIVATE_KEY');
+}
+
+function requireWalletAddress () {
+    assert (process.env.FIBE_USER !== undefined && process.env.FIBE_USER !== '', 'missing FIBE_USER');
+}
+
+function sleep (ms) {
+    return new Promise ((resolve) => setTimeout (resolve, ms));
+}
+
+function decimalPlacesFromPrecision (precision) {
+    if (typeof precision !== 'number') {
+        return 5;
+    }
+    const text = precision.toString ();
+    const dot = text.indexOf ('.');
+    if (dot < 0) {
+        return 0;
+    }
+    return text.length - dot - 1;
+}
+
+function defaultOrderAmount (market) {
+    const amountPrecision = market['precision']?.['amount'];
+    const decimals = decimalPlacesFromPrecision (amountPrecision);
+    return Number ((1 / Math.pow (10, decimals)).toFixed (decimals));
+}
+
+function nextOrderId () {
+    return process.env.FIBE_ORDER_ID || String ((Date.now () * 1000) + Math.floor (Math.random () * 1000));
+}
+
+function orderMatchesId (order, orderId) {
+    return order['id'] === orderId || order['clientOrderId'] === orderId || order['info']?.['oid'] === orderId;
+}
+
+function rpcSummary (requests) {
+    const counts = {};
+    const multipleAccountBatchSizes = [];
+    for (const request of requests) {
+        counts[request.method] = (counts[request.method] || 0) + 1;
+        if (request.method === 'getMultipleAccounts') {
+            multipleAccountBatchSizes.push (request.params[0].length);
+        }
+    }
+    return {
+        counts,
+        multipleAccountBatchSizes,
+    };
+}
+
+async function withRpcCapture (exchange, interceptSend, callback) {
+    const originalRpc = exchange.solanaRpc.bind (exchange);
+    const requests = [];
+    exchange.solanaRpc = async (url, method, params) => {
+        requests.push ({ url, method, params });
+        if (interceptSend && method === 'sendTransaction') {
+            return 'inspect-only-not-sent';
+        }
+        return originalRpc (url, method, params);
+    };
+    try {
+        const value = await callback ();
+        return { value, requests };
+    } finally {
+        exchange.solanaRpc = originalRpc;
+    }
+}
+
+async function chooseRestingOrderInput (exchange, markets, symbol) {
+    const market = markets[symbol];
+    assert (market !== undefined, 'unknown symbol ' + symbol);
+    const side = process.env.FIBE_SIDE || 'buy';
+    assert (side === 'buy' || side === 'sell', 'FIBE_SIDE must be buy or sell');
+    const amount = Number (process.env.FIBE_AMOUNT || defaultOrderAmount (market));
+    assert (Number.isFinite (amount) && amount > 0, 'invalid order amount');
+    if (process.env.FIBE_PRICE !== undefined) {
+        return {
+            symbol,
+            side,
+            amount,
+            price: Number (process.env.FIBE_PRICE),
+        };
+    }
+    const bpsAway = Number (process.env.FIBE_PRICE_AWAY_BPS || 1000);
+    const orderBook = await exchange.fetchOrderBook (symbol, 1);
+    const ticker = await exchange.fetchTicker (symbol);
+    const bestBid = orderBook['bids'][0]?.[0];
+    const bestAsk = orderBook['asks'][0]?.[0];
+    let reference = undefined;
+    if (side === 'buy') {
+        reference = bestBid || bestAsk || ticker['last'] || ticker['close'];
+    } else {
+        reference = bestAsk || bestBid || ticker['last'] || ticker['close'];
+    }
+    assert (typeof reference === 'number' && Number.isFinite (reference) && reference > 0, 'could not derive reference price');
+    const multiplier = (side === 'buy') ? (1 - (bpsAway / 10000)) : (1 + (bpsAway / 10000));
+    const precisePrice = exchange.priceToPrecision (symbol, reference * multiplier);
+    const price = Number (precisePrice);
+    assert (Number.isFinite (price) && price > 0, 'derived invalid order price');
+    return {
+        symbol,
+        side,
+        amount,
+        price,
+        reference,
+        bestBid,
+        bestAsk,
+        bpsAway,
+    };
+}
+
+function localOrderParams (orderId, extra = {}) {
+    const params = {
+        orderId,
+        timeInForce: process.env.FIBE_TIME_IN_FORCE || 'GTC',
+        subAccountIndex: process.env.FIBE_SUB_ACCOUNT_INDEX === undefined ? undefined : Number (process.env.FIBE_SUB_ACCOUNT_INDEX),
+        marginAccountKind: process.env.FIBE_MARGIN_ACCOUNT_KIND,
+        initialLeverage: process.env.FIBE_INITIAL_LEVERAGE === undefined ? undefined : Number (process.env.FIBE_INITIAL_LEVERAGE),
+        autoTopUpCollateralFromWallet: process.env.FIBE_AUTO_TOP_UP_COLLATERAL === '1',
+        maxRetries: process.env.FIBE_MAX_RETRIES === undefined ? undefined : Number (process.env.FIBE_MAX_RETRIES),
+        computeUnitLimit: process.env.FIBE_COMPUTE_UNIT_LIMIT === undefined ? undefined : Number (process.env.FIBE_COMPUTE_UNIT_LIMIT),
+        computeUnitPriceMicroLamports: process.env.FIBE_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS,
+        ...extra,
+    };
+    if (process.env.FIBE_CREATE_ATA !== undefined) {
+        params.createAssociatedTokenAccount = process.env.FIBE_CREATE_ATA !== '0';
+    }
+    return compactParams (params);
+}
+
+function localCancelParams (createdOrderInfo = {}, extra = {}) {
+    return compactParams ({
+        priceInTicks: createdOrderInfo['priceInTicks'],
+        tickArray: createdOrderInfo['tickArray'],
+        subAccountIndex: process.env.FIBE_SUB_ACCOUNT_INDEX === undefined ? undefined : Number (process.env.FIBE_SUB_ACCOUNT_INDEX),
+        maxRetries: process.env.FIBE_MAX_RETRIES === undefined ? undefined : Number (process.env.FIBE_MAX_RETRIES),
+        computeUnitLimit: process.env.FIBE_COMPUTE_UNIT_LIMIT === undefined ? undefined : Number (process.env.FIBE_COMPUTE_UNIT_LIMIT),
+        computeUnitPriceMicroLamports: process.env.FIBE_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS,
+        ...extra,
+    });
+}
+
+function compactParams (params) {
+    const result = {};
+    for (const [ key, value ] of Object.entries (params)) {
+        if (value !== undefined) {
+            result[key] = value;
+        }
+    }
+    return result;
+}
+
+async function waitForSignature (exchange, signature) {
+    if (signature === undefined || signature === 'inspect-only-not-sent') {
+        return undefined;
+    }
+    const deadline = Date.now () + Number (process.env.FIBE_SIGNATURE_TIMEOUT_MS || 60000);
+    while (Date.now () < deadline) {
+        const status = await exchange.solanaRpc (exchange.options['rpcUrl'], 'getSignatureStatuses', [
+            [ signature ],
+            { searchTransactionHistory: true },
+        ]);
+        const value = status['value']?.[0];
+        if (value !== null && value !== undefined) {
+            if (value['err'] !== null) {
+                throw new Error ('transaction failed: ' + JSON.stringify (value['err']));
+            }
+            if (value['confirmationStatus'] === 'confirmed' || value['confirmationStatus'] === 'finalized') {
+                return value;
+            }
+        }
+        await sleep (2000);
+    }
+    throw new Error ('signature was not confirmed before timeout: ' + signature);
+}
+
+async function waitForOrderPresence (exchange, symbol, user, orderId, expectedPresent) {
+    const deadline = Date.now () + Number (process.env.FIBE_INDEXER_TIMEOUT_MS || 90000);
+    let lastOpenOrders = [];
+    while (Date.now () < deadline) {
+        lastOpenOrders = await exchange.fetchOpenOrders (symbol, undefined, 50, { user });
+        const found = lastOpenOrders.some ((order) => orderMatchesId (order, orderId));
+        if (found === expectedPresent) {
+            return lastOpenOrders;
+        }
+        await sleep (3000);
+    }
+    throw new Error ('order ' + orderId + (expectedPresent ? ' did not appear in open orders' : ' stayed in open orders'));
+}
+
+async function expectFailure (name, callback) {
+    try {
+        await callback ();
+    } catch (e) {
+        print (name, {
+            ok: true,
+            message: e.message,
+        });
+        return;
+    }
+    throw new Error (name + ' unexpectedly succeeded');
 }
 
 async function main () {
@@ -68,14 +321,14 @@ async function main () {
         print ('fetchMarkets', symbols.slice (0, 5).map ((symbol) => {
             const m = markets[symbol];
             return {
-            id: m['id'],
-            symbol: m['symbol'],
-            type: m['type'],
-            base: m['base'],
-            quote: m['quote'],
-            spot: m['spot'],
-            swap: m['swap'],
-            precision: m['precision'],
+                id: m['id'],
+                symbol: m['symbol'],
+                type: m['type'],
+                base: m['base'],
+                quote: m['quote'],
+                spot: m['spot'],
+                swap: m['swap'],
+                precision: m['precision'],
             };
         }));
     }
@@ -138,7 +391,7 @@ async function main () {
         print ('fetchTrades', trades);
     }
 
-    // ponytail: candles are sparse, use a wider live window and let CCXT trim to 3.
+    // Live candles can be sparse, so use a wider window and let CCXT trim to 3.
     const until = Date.now ();
     const since = until - 24 * 60 * 60 * 1000;
     if (shouldRun ('fetchOHLCV')) {
@@ -197,6 +450,136 @@ async function main () {
         assert (Array.isArray (orders), 'expected historical orders array');
         assert (orders.length <= 2, 'historical orders limit failed');
         print ('fetchOrders', orders);
+    }
+
+    if (shouldRun ('createOrder')) {
+        requireTradingEnabled ();
+        const tradingSymbol = process.env.FIBE_SYMBOL || sym;
+        assert (markets[tradingSymbol] !== undefined, 'unknown symbol ' + tradingSymbol);
+        const order = await fibe.createOrder (
+            tradingSymbol,
+            'limit',
+            process.env.FIBE_SIDE || 'buy',
+            Number (env ('FIBE_AMOUNT')),
+            Number (env ('FIBE_PRICE')),
+            {
+                orderId: process.env.FIBE_ORDER_ID,
+                timeInForce: process.env.FIBE_TIME_IN_FORCE || 'GTC',
+            }
+        );
+        print ('createOrder', order);
+    }
+
+    if (shouldRun ('cancelOrder')) {
+        requireTradingEnabled ();
+        const tradingSymbol = process.env.FIBE_SYMBOL || sym;
+        assert (markets[tradingSymbol] !== undefined, 'unknown symbol ' + tradingSymbol);
+        const order = await fibe.cancelOrder (env ('FIBE_ORDER_ID'), tradingSymbol);
+        print ('cancelOrder', order);
+    }
+
+    if (shouldRun ('inspectLocalOrderTx')) {
+        requireWalletAddress ();
+        requirePrivateKey ();
+        const tradingSymbol = process.env.FIBE_SYMBOL || symbols.find ((symbol) => markets[symbol]['spot']) || sym;
+        const input = await chooseRestingOrderInput (fibe, markets, tradingSymbol);
+        const orderId = nextOrderId ();
+        const { value: order, requests } = await withRpcCapture (fibe, true, () => fibe.createOrder (
+            input.symbol,
+            'limit',
+            input.side,
+            input.amount,
+            input.price,
+            localOrderParams (orderId)
+        ));
+        const info = order['info'];
+        print ('inspectLocalOrderTx', {
+            orderInput: input,
+            orderId,
+            priceInTicks: info['priceInTicks'],
+            orderPda: info['orderPda'],
+            tickArray: info['tickArray'],
+            tickArrays: info['tickArrays'],
+            transactionBytes: Buffer.from (info['transaction'], 'base64').length,
+            rpc: rpcSummary (requests),
+            interceptedSignature: info['signature'],
+        });
+    }
+
+    if (shouldRun ('liveCreateCancelOrder')) {
+        requireTradingEnabled ();
+        requireWalletAddress ();
+        requirePrivateKey ();
+        const tradingSymbol = process.env.FIBE_SYMBOL || symbols.find ((symbol) => markets[symbol]['spot']) || sym;
+        const userAddress = env ('FIBE_USER');
+        const input = await chooseRestingOrderInput (fibe, markets, tradingSymbol);
+        const orderId = nextOrderId ();
+        const createOrder = await fibe.createOrder (
+            input.symbol,
+            'limit',
+            input.side,
+            input.amount,
+            input.price,
+            localOrderParams (orderId)
+        );
+        print ('liveCreateCancelOrder.createOrder', createOrder);
+        const createStatus = await waitForSignature (fibe, createOrder['info']['signature']);
+        print ('liveCreateCancelOrder.createSignatureStatus', createStatus);
+        const openOrdersAfterCreate = await waitForOrderPresence (fibe, input.symbol, userAddress, orderId, true);
+        print ('liveCreateCancelOrder.openOrdersAfterCreate', openOrdersAfterCreate.filter ((order) => orderMatchesId (order, orderId)));
+
+        const cancelOrder = await fibe.cancelOrder (
+            orderId,
+            input.symbol,
+            localCancelParams (createOrder['info'])
+        );
+        print ('liveCreateCancelOrder.cancelOrder', cancelOrder);
+        const cancelStatus = await waitForSignature (fibe, cancelOrder['info']['signature']);
+        print ('liveCreateCancelOrder.cancelSignatureStatus', cancelStatus);
+        const openOrdersAfterCancel = await waitForOrderPresence (fibe, input.symbol, userAddress, orderId, false);
+        print ('liveCreateCancelOrder.openOrdersAfterCancel', openOrdersAfterCancel.filter ((order) => orderMatchesId (order, orderId)));
+        const historicalOrders = await fibe.fetchOrders (input.symbol, undefined, 10, { user: userAddress });
+        print ('liveCreateCancelOrder.historicalOrder', historicalOrders.filter ((order) => orderMatchesId (order, orderId)));
+    }
+
+    if (shouldRun ('liveFailureChecks')) {
+        requireTradingEnabled ();
+        requireWalletAddress ();
+        requirePrivateKey ();
+        const tradingSymbol = process.env.FIBE_SYMBOL || symbols.find ((symbol) => markets[symbol]['spot']) || sym;
+        const input = await chooseRestingOrderInput (fibe, markets, tradingSymbol);
+        await expectFailure ('liveFailureChecks.badRpcUrl', () => fibe.createOrder (
+            input.symbol,
+            'limit',
+            input.side,
+            input.amount,
+            input.price,
+            localOrderParams (nextOrderId (), { rpcUrl: 'http://127.0.0.1:9' })
+        ));
+        await expectFailure ('liveFailureChecks.badPrivateKey', () => fibe.createOrder (
+            input.symbol,
+            'limit',
+            input.side,
+            input.amount,
+            input.price,
+            localOrderParams (nextOrderId (), { privateKey: '0x' + '01'.repeat (32) })
+        ));
+        await expectFailure ('liveFailureChecks.staleBlockhash', () => fibe.createOrder (
+            input.symbol,
+            'limit',
+            input.side,
+            input.amount,
+            input.price,
+            localOrderParams (nextOrderId (), { blockhash: '11111111111111111111111111111111' })
+        ));
+        await expectFailure ('liveFailureChecks.badTickArray', () => fibe.createOrder (
+            input.symbol,
+            'limit',
+            input.side,
+            input.amount,
+            input.price,
+            localOrderParams (nextOrderId (), { tickArrays: [ '11111111111111111111111111111111' ] })
+        ));
     }
 }
 
