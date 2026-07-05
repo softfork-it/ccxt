@@ -1060,7 +1060,7 @@ export default class fibe extends Exchange {
         orderId = this.fibeValidateUnsignedIntegerParam ('createOrder', 'orderId', orderId);
         let postOnly = undefined;
         [ postOnly, params ] = this.handlePostOnly (false, false, params);
-        params = this.omit (params, [ 'postOnly', 'post_only' ]);
+        params = this.omit (params, 'postOnly');
         let timeInForce = undefined;
         [ timeInForce, params ] = this.handleOptionAndParams (params, 'createOrder', 'timeInForce');
         if (isMarketOrder) {
@@ -1167,6 +1167,11 @@ export default class fibe extends Exchange {
             'initialLeverage': initialLeverage,
             'autoTopUpCollateralFromWallet': autoTopUpCollateralFromWallet,
         });
+        let orderPrice = undefined;
+        if (isLimitOrder) {
+            const marketInfo = market['info'];
+            orderPrice = this.fibeTicksToPrice (this.safeString (result, 'priceInTicks'), this.safeInteger (marketInfo, 'quoteDecimals'), this.safeString (marketInfo, 'tickSizeInQuoteBaseUnits'));
+        }
         return this.safeOrder ({
             'info': result,
             'id': orderId,
@@ -1181,7 +1186,7 @@ export default class fibe extends Exchange {
             'postOnly': (fibeTimeInForce === 'ALO'),
             'reduceOnly': undefined,
             'side': orderSide,
-            'price': isLimitOrder ? priceString : undefined,
+            'price': orderPrice,
             'triggerPrice': undefined,
             'amount': amountString,
             'cost': undefined,
@@ -1858,6 +1863,11 @@ export default class fibe extends Exchange {
         return this.fibeDecimalStringDivInteger (scaled, parseInt (tickSizeInQuoteBaseUnits), side !== 'B');
     }
 
+    fibeTicksToPrice (priceInTicks, quoteDecimals, tickSizeInQuoteBaseUnits) {
+        const rawPrice = Precise.stringMul (this.numberToString (priceInTicks), this.numberToString (tickSizeInQuoteBaseUnits));
+        return Precise.stringMul (rawPrice, this.parsePrecision (this.numberToString (quoteDecimals)));
+    }
+
     solanaIsHexString (value) {
         if (value === '') {
             return false;
@@ -2373,6 +2383,7 @@ export default class fibe extends Exchange {
     }
 
     fibeFindTickArrayIndexesForOrder (states, priceInTicks, baseLots, side) {
+        states = this.sortBy (states, 'startTick');
         const startTick = parseInt (this.fibeGetTickArrayStartTick (this.numberToString (priceInTicks)));
         const indexes = [];
         let remainingLots = baseLots;
@@ -2904,6 +2915,9 @@ export default class fibe extends Exchange {
         const subAccountIndex = this.safeInteger (params, 'subAccountIndex', 0);
         const orderSubAccountIndex = (mt === 'S') ? 0 : subAccountIndex;
         const priceInTicks = this.fibePriceToTicks (this.safeString (params, 'price'), this.safeInteger (market, 'quoteDecimals'), this.safeString (market, 'tickSizeInQuoteBaseUnits'), this.safeString (params, 'side'), this.safeNumber (params, 'slippage'));
+        if (!Precise.stringGt (priceInTicks, '0')) {
+            throw new InvalidOrder (this.id + ' createOrder() price is too small for market tick size');
+        }
         const sizeInBase = this.fibeNormalizeQuantity (
             this.fibeDecimalToUnits (this.safeString (params, 'amount'), this.safeInteger (market, 'baseDecimals')),
             this.safeString (market, 'lotSizeInBaseBaseUnits')

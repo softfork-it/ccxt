@@ -268,6 +268,31 @@ async function testFibeLocalTx() {
         assert(exchange.fibePriceToTicks('1789.66', 6, '100000', 'B') === '17896');
         assert(exchange.fibePriceToTicks('1789.61', 6, '100000', 'A') === '17897');
         assert(exchange.fibePriceToTicks('1789.6', 6, '100000', 'A', 0.05) === '17002');
+        assert(exchange.fibeTicksToPrice('17896', 6, '100000') === '1789.6');
+    }
+    {
+        const { exchange } = createExchange();
+        const emptyTicks = () => {
+            const ticks = [];
+            for (let i = 0; i < exchange.fibeTickSizeInArray(); i++) {
+                ticks.push({ 'unfilledLots': '0', 'sideBit': 0 });
+            }
+            return ticks;
+        };
+        const bidLiquidity = emptyTicks();
+        bidLiquidity[0] = { 'unfilledLots': '2', 'sideBit': -1 };
+        const askLiquidity = emptyTicks();
+        askLiquidity[99] = { 'unfilledLots': '2', 'sideBit': 1 };
+        assert.deepStrictEqual(exchange.fibeFindTickArrayIndexesForOrder([
+            { 'startTick': 17800, 'ticks': emptyTicks() },
+            { 'startTick': 17600, 'ticks': emptyTicks() },
+            { 'startTick': 17700, 'ticks': bidLiquidity },
+        ], 17896, '2', 'B'), [17600, 17700]);
+        assert.deepStrictEqual(exchange.fibeFindTickArrayIndexesForOrder([
+            { 'startTick': 18100, 'ticks': emptyTicks() },
+            { 'startTick': 17900, 'ticks': emptyTicks() },
+            { 'startTick': 18000, 'ticks': askLiquidity },
+        ], 17896, '2', 'A'), [18000, 18100]);
     }
     {
         const { exchange } = createExchange();
@@ -293,6 +318,7 @@ async function testFibeLocalTx() {
             'orderId': '123456792',
         });
         assert(order['info']['priceInTicks'] === '17896');
+        assert(order['price'] === 1789.6);
     }
     {
         const { exchange } = createExchange();
@@ -301,6 +327,7 @@ async function testFibeLocalTx() {
             'orderId': '123456793',
         });
         assert(order['info']['priceInTicks'] === '17897');
+        assert(order['price'] === 1789.7);
     }
     {
         const { exchange } = createExchange();
@@ -347,6 +374,10 @@ async function testFibeLocalTx() {
             'orderId': '123456789',
         }), 'InvalidOrder');
         await assertRejectsWithName('expected createOrder to reject negative price', () => exchange.createOrder('ETH/USDC', 'limit', 'buy', 0.00002, -1, {
+            'rpcUrl': rpcUrl,
+            'orderId': '123456789',
+        }), 'InvalidOrder');
+        await assertRejectsWithName('expected createOrder to reject zero tick price', () => exchange.createOrder('ETH/USDC', 'limit', 'buy', 0.00002, 0.05, {
             'rpcUrl': rpcUrl,
             'orderId': '123456789',
         }), 'InvalidOrder');

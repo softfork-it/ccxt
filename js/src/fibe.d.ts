@@ -86,6 +86,7 @@ export default class fibe extends Exchange {
     fibeTimeInForceIndex(timeInForce: any): number;
     fibeGetTickArrayStartTick(priceInTicks: any): string;
     fibePriceToTicks(price: any, quoteDecimals: any, tickSizeInQuoteBaseUnits: any, side?: any, slippage?: any): any;
+    fibeTicksToPrice(priceInTicks: any, quoteDecimals: any, tickSizeInQuoteBaseUnits: any): string;
     solanaIsHexString(value: any): boolean;
     solanaPublicKeyFromSecretKeyHex(secretKeyHex: any): string;
     solanaParsePrivateKeyHex(privateKey: any, user?: any): any;
