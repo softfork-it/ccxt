@@ -109,7 +109,6 @@ export default class fibe extends Exchange {
     fibeGetUserStatePda(user: any): string;
     fibeGetSubAccountStatePda(owner: any, subAccountIndex: any): string;
     fibeGetUserMarginAccountPda(owner: any, subAccountIndex: any, quoteMint: any): string;
-    fibeGetOrderPda(owner: any, subAccountIndex: any, orderId: any): string;
     fibeGetOpenOrdersPerMarketPda(mt: any, owner: any, subAccountIndex: any, mi: any): string;
     fibeGetSpotMarketVaultPda(mi: any, tokenMint: any): string;
     fibeGetPerpMarketVaultPda(tokenMint: any): string;
@@ -207,13 +206,11 @@ export default class fibe extends Exchange {
     };
     solanaFindAccountIndex(accounts: any, pubkey: any): number;
     solanaAddAccountMeta(accounts: any, meta: any): void;
-    solanaComparePubkeys(a: any, b: any): 0 | 1 | -1;
     solanaCompileMessageHex(payer: any, blockhash: any, instructions: any): string;
     solanaSignTransaction(payer: any, privateKeyHex: any, blockhash: any, instructions: any): {
         signature: string;
         transaction: string;
     };
-    solanaReadU64(data: any, offset: any): any;
     fibeReadOpenOrderPriceInTicks(data: any, mt: any, orderId: any): any;
     fibeLocalTxCreateOrder(params: any): Promise<Dict>;
     fibeLocalTxCancelOrder(params: any): Promise<Dict>;
