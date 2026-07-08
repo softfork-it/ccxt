@@ -42,6 +42,7 @@ export default class fibe extends Exchange {
                 'fetchFundingRate': true,
                 'fetchFundingRates': true,
                 'fetchMarkets': true,
+                'fetchMyTrades': true,
                 'fetchOHLCV': true,
                 'fetchOpenOrders': true,
                 'fetchOrderBook': true,
@@ -100,6 +101,7 @@ export default class fibe extends Exchange {
                         'all-clearinghouse-state': 1,
                         'user-fees': 1,
                         'user-funding-history': 1,
+                        'user-trades': 1,
                     },
                 },
             },
@@ -802,6 +804,55 @@ export default class fibe extends Exchange {
         return this.parseTrades (response, market, since, limit);
     }
 
+    async fetchMyTrades (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
+        /**
+         * @method
+         * @name fibe#fetchMyTrades
+         * @description fetch all trades made by the user
+         * @see https://fb-4b8448ac.alephium.org/api/v1/user-trades
+         * @param {string} [symbol] unified market symbol
+         * @param {int} [since] timestamp in ms of the earliest trade to fetch
+         * @param {int} [limit] the maximum amount of trades to fetch
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {int} [params.until] timestamp in ms of the latest trade to fetch
+         * @returns {Trade[]} a list of [trade structures]{@link https://docs.ccxt.com/#/?id=trade-structure}
+         */
+        let userAddress = undefined;
+        [ userAddress, params ] = this.handlePublicAddress ('fetchMyTrades', params);
+        await this.loadMarkets ();
+        let market = undefined;
+        const request: Dict = {
+            'user': userAddress,
+        };
+        if (symbol !== undefined) {
+            market = this.market (symbol);
+            const info = market['info'];
+            request['mi'] = this.safeString (info, 'mi');
+            request['mt'] = this.safeString (info, 'mt', 'S');
+        }
+        if (since !== undefined) {
+            request['startTime'] = this.parseToInt (since / 1000);
+        }
+        let until: Int = undefined;
+        [ until, params ] = this.handleOptionAndParams (params, 'fetchMyTrades', 'until');
+        if (until !== undefined) {
+            request['endTime'] = this.parseToInt (Math.ceil (until / 1000));
+        }
+        if (limit !== undefined) {
+            request['limit'] = limit;
+        }
+        const response = await this.publicGetUserTrades (this.extend (request, params));
+        let trades = this.parseTrades (response, market, since, undefined);
+        if (until !== undefined) {
+            trades = trades.filter ((trade) => {
+                const timestamp = this.safeInteger (trade, 'timestamp');
+                return (timestamp !== undefined) && (timestamp <= until);
+            });
+        }
+        return this.filterBySinceLimit (trades, since, limit) as Trade[];
+    }
+
     parseTrade (trade: Dict, market: Market = undefined): Trade {
         //
         //     {
@@ -815,18 +866,30 @@ export default class fibe extends Exchange {
         //         "txId": "3QNbQR27r5fgxbFLAX4nMuvMvV6KRHQcPHYFrzoh3RdKzUcBejatrJBfpf1FYyQzGcVhee1DqgEaGzCngMxXaoRq"
         //     }
         //
+        const mi = this.safeString (trade, 'mi');
+        const mt = this.safeString (trade, 'mt');
+        let marketId = undefined;
+        if (mi !== undefined) {
+            let idPrefix = 'spot:';
+            if (mt === 'P') {
+                idPrefix = 'perp:';
+            }
+            marketId = idPrefix + mi;
+        }
+        market = this.safeMarket (marketId, market);
         const timestamp = this.safeTimestamp (trade, 'time');
         const side = this.parseSide (this.safeString (trade, 'side'));
+        const takerOrMaker = this.safeString (trade, 'takerOrMaker');
         return this.safeTrade ({
             'info': trade,
             'id': undefined,
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
-            'symbol': this.safeSymbol (undefined, market),
+            'symbol': market['symbol'],
             'order': this.safeString (trade, 'oid'),
             'type': undefined,
             'side': side,
-            'takerOrMaker': undefined,
+            'takerOrMaker': takerOrMaker,
             'price': this.safeString (trade, 'px'),
             'amount': this.safeString (trade, 'sz'),
             'cost': undefined,

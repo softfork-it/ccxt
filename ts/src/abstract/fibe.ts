@@ -25,6 +25,7 @@ interface Exchange {
     publicGetAllClearinghouseState (params?: {}): Promise<implicitReturnType>;
     publicGetUserFees (params?: {}): Promise<implicitReturnType>;
     publicGetUserFundingHistory (params?: {}): Promise<implicitReturnType>;
+    publicGetUserTrades (params?: {}): Promise<implicitReturnType>;
 }
 abstract class Exchange extends _Exchange {}
 

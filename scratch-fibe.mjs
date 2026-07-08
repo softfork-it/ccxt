@@ -13,6 +13,7 @@
 //     node scratch-fibe.mjs fetchTradingFee
 //     FIBE_USER=... node scratch-fibe.mjs fetchPositions
 //     FIBE_USER=... node scratch-fibe.mjs fetchFundingHistory
+//     FIBE_USER=... FIBE_SINCE='2026-07-08T21:00:00Z' FIBE_UNTIL='2026-07-08T22:00:00Z' node scratch-fibe.mjs fetchMyTrades
 //     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_SIDE=buy FIBE_AMOUNT=0.01 FIBE_PRICE=1000 node scratch-fibe.mjs createOrder
 //     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_ORDER_ID=... node scratch-fibe.mjs cancelOrder
 //     FIBE_USER=... FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC node scratch-fibe.mjs inspectLocalOrderTx
@@ -38,6 +39,7 @@ const available = [
     'fetchTickers',
     'fetchOrderBook',
     'fetchTrades',
+    'fetchMyTrades',
     'fetchOHLCV',
     'fetchBalance',
     'fetchPositions',
@@ -60,6 +62,7 @@ const defaultTargets = new Set ([
     'fetchTickers',
     'fetchOrderBook',
     'fetchTrades',
+    'fetchMyTrades',
     'fetchOHLCV',
     'fetchBalance',
     'fetchPositions',
@@ -100,6 +103,16 @@ function env (name) {
     const value = process.env[name];
     assert (value !== undefined && value !== '', 'missing ' + name);
     return value;
+}
+
+function optionalTimestampEnv (name) {
+    const value = process.env[name];
+    if (value === undefined || value === '') {
+        return undefined;
+    }
+    const timestamp = /^\d+$/.test (value) ? Number (value) : Date.parse (value);
+    assert (Number.isFinite (timestamp), name + ' must be an ISO timestamp or millisecond timestamp');
+    return timestamp;
 }
 
 function requireTradingEnabled () {
@@ -402,6 +415,21 @@ async function main () {
     }
 
     const user = process.env.FIBE_USER || '11111111111111111111111111111111';
+    if (shouldRun ('fetchMyTrades')) {
+        const myTradesSince = optionalTimestampEnv ('FIBE_SINCE');
+        const myTradesUntil = optionalTimestampEnv ('FIBE_UNTIL');
+        const myTradesLimit = process.env.FIBE_LIMIT === undefined ? 3 : Number (process.env.FIBE_LIMIT);
+        assert (Number.isInteger (myTradesLimit) && myTradesLimit > 0, 'FIBE_LIMIT must be a positive integer');
+        const myTrades = await fibe.fetchMyTrades (process.env.FIBE_SYMBOL, myTradesSince, myTradesLimit, { user, until: myTradesUntil });
+        assert (Array.isArray (myTrades), 'expected my trades array');
+        assert (myTrades.length <= myTradesLimit, 'my trades limit failed');
+        if (process.env.FIBE_SYMBOL !== undefined) {
+            assert (myTrades.every ((trade) => trade['symbol'] === sym), 'my trade symbol mismatch');
+        }
+        assert (myTrades.every ((trade) => (trade['takerOrMaker'] === undefined) || (trade['takerOrMaker'] === 'taker') || (trade['takerOrMaker'] === 'maker')), 'unexpected takerOrMaker value');
+        print ('fetchMyTrades', myTrades);
+    }
+
     if (shouldRun ('fetchBalance')) {
         const balance = await fibe.fetchBalance ({ user });
         assert (balance['info']['user'] === user, 'balance user mismatch');
