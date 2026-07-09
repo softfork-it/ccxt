@@ -43,6 +43,7 @@ export default class fibe extends Exchange {
     createOrder(symbol: string, type: OrderType, side: OrderSide, amount: number, price?: Num, params?: {}): Promise<Order>;
     cancelOrder(id: string, symbol?: Str, params?: {}): Promise<Order>;
     cancelOrders(ids: string[], symbol?: Str, params?: {}): Promise<Order[]>;
+    cancelAllOrders(symbol?: Str, params?: {}): Promise<Order[]>;
     parseOrder(order: Dict, market?: Market): Order;
     fibeProgramId(): string;
     solanaSystemProgramId(): string;

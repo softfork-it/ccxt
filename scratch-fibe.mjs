@@ -18,6 +18,7 @@
 //     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_SIDE=buy FIBE_AMOUNT=0.01 FIBE_PRICE=1000 node scratch-fibe.mjs createOrder
 //     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_ORDER_ID=... node scratch-fibe.mjs cancelOrder
 //     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_ORDER_IDS=1,2 node scratch-fibe.mjs cancelOrders
+//     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC node scratch-fibe.mjs cancelAllOrders
 //     FIBE_USER=... FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC node scratch-fibe.mjs inspectLocalOrderTx
 //     FIBE_ENABLE_TRADING=1 FIBE_USER=... FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC node scratch-fibe.mjs liveCreateCancelOrder
 //     FIBE_ENABLE_TRADING=1 FIBE_USER=... FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC node scratch-fibe.mjs liveFailureChecks
@@ -55,6 +56,7 @@ const available = [
     'createOrder',
     'cancelOrder',
     'cancelOrders',
+    'cancelAllOrders',
     'inspectLocalOrderTx',
     'liveCreateCancelOrder',
     'liveFailureChecks',
@@ -526,6 +528,14 @@ async function main () {
         assert (orderIds.length > 0, 'expected FIBE_ORDER_IDS');
         const orders = await fibe.cancelOrders (orderIds, tradingSymbol);
         print ('cancelOrders', orders);
+    }
+
+    if (shouldRun ('cancelAllOrders')) {
+        requireTradingEnabled ();
+        const tradingSymbol = process.env.FIBE_SYMBOL || sym;
+        assert (markets[tradingSymbol] !== undefined, 'unknown symbol ' + tradingSymbol);
+        const orders = await fibe.cancelAllOrders (tradingSymbol);
+        print ('cancelAllOrders', orders);
     }
 
     if (shouldRun ('inspectLocalOrderTx')) {

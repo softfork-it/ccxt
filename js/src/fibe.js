@@ -36,6 +36,7 @@ export default class fibe extends Exchange {
                 'future': false,
                 'option': false,
                 'cancelOrder': true,
+                'cancelAllOrders': true,
                 'cancelOrders': true,
                 'createOrder': true,
                 'fetchBalance': true,
@@ -1403,6 +1404,35 @@ export default class fibe extends Exchange {
             orders.push(order);
         }
         return orders;
+    }
+    async cancelAllOrders(symbol = undefined, params = {}) {
+        /**
+         * @method
+         * @name fibe#cancelAllOrders
+         * @description cancels all normal-user open orders for one market by fetching open orders, then submitting one local Solana cancellation transaction per order
+         * @param {string} symbol unified market symbol
+         * @param {object} [params] extra parameters specific to the exchange API endpoint, same as cancelOrder()
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @returns {Order[]} a list of order structures
+         */
+        if (symbol === undefined) {
+            throw new ArgumentsRequired(this.id + ' cancelAllOrders() requires a symbol for local tx construction');
+        }
+        const fetchOpenOrdersParams = {};
+        const user = this.safeString2(params, 'user', 'address');
+        if (user !== undefined) {
+            fetchOpenOrdersParams['user'] = user;
+        }
+        const openOrders = await this.fetchOpenOrders(symbol, undefined, undefined, fetchOpenOrdersParams);
+        const ids = [];
+        for (let i = 0; i < openOrders.length; i++) {
+            const id = this.safeString(openOrders[i], 'id');
+            if (id === undefined) {
+                throw new ExchangeError(this.id + ' cancelAllOrders() cannot cancel an open order without an id');
+            }
+            ids.push(id);
+        }
+        return await this.cancelOrders(ids, symbol, params);
     }
     parseOrder(order, market = undefined) {
         //
