@@ -2,7 +2,7 @@
 //  ---------------------------------------------------------------------------
 
 import Exchange from './abstract/fibe.js';
-import { ArgumentsRequired, AuthenticationError, ExchangeError, InvalidOrder } from './base/errors.js';
+import { ArgumentsRequired, AuthenticationError, ExchangeError, InvalidOrder, OrderNotFound } from './base/errors.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { eddsa } from './base/functions/crypto.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
@@ -45,6 +45,7 @@ export default class fibe extends Exchange {
                 'fetchMyTrades': true,
                 'fetchOHLCV': true,
                 'fetchOpenOrders': true,
+                'fetchOrder': true,
                 'fetchOrderBook': true,
                 'fetchOrders': true,
                 'fetchPositions': true,
@@ -94,6 +95,7 @@ export default class fibe extends Exchange {
                         'l2book': 1,
                         'recent-market-trades': 1,
                         'candles': 1,
+                        'order': 1,
                         'open-orders': 1,
                         'historical-orders': 1,
                         'spot-state': 1,
@@ -971,6 +973,42 @@ export default class fibe extends Exchange {
             this.safeNumber (ohlcv, 'c'),
             this.safeNumber (ohlcv, 'bv'),
         ];
+    }
+
+    async fetchOrder (id: string, symbol: Str = undefined, params = {}): Promise<Order> {
+        /**
+         * @method
+         * @name fibe#fetchOrder
+         * @description fetches information on an order made by the user
+         * @see https://fb-4b8448ac.alephium.org/api/v1/order
+         * @param {string} id order id
+         * @param {string} symbol unified market symbol of the order
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {int} [params.subAccountIndex] perp subaccount index, defaults to 0
+         * @returns {Order} an [order structure]{@link https://docs.ccxt.com/#/?id=order-structure}
+         */
+        if (symbol === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchOrder() requires a symbol');
+        }
+        id = this.fibeValidateUnsignedIntegerParam ('fetchOrder', 'id', id);
+        let userAddress = undefined;
+        [ userAddress, params ] = this.handlePublicAddress ('fetchOrder', params);
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        let subAccountIndex = undefined;
+        [ subAccountIndex, params ] = this.handleOptionAndParams (params, 'fetchOrder', 'subAccountIndex', 0);
+        subAccountIndex = this.fibeValidateU8Param ('fetchOrder', 'subAccountIndex', subAccountIndex);
+        const info = market['info'];
+        const request: Dict = {
+            'user': userAddress,
+            'orderId': id,
+            'mi': this.safeString (info, 'mi'),
+            'mt': this.safeString (info, 'mt', 'S'),
+            'subAccountIndex': subAccountIndex,
+        };
+        const response = await this.publicGetOrder (this.extend (request, params));
+        return this.parseOrder (response, market);
     }
 
     async fetchOpenOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
@@ -3386,6 +3424,10 @@ export default class fibe extends Exchange {
     handleErrors (code: int, reason: string, url: string, method: string, headers: Dict, body: string, response, requestHeaders, requestBody) {
         if (response === undefined) {
             return undefined;
+        }
+        const error = this.safeString (response, 'error');
+        if ((code === 404) && (error !== undefined)) {
+            throw new OrderNotFound (this.id + ' ' + error);
         }
         // map Fibe error bodies to ccxt exceptions here
         return undefined;

@@ -14,6 +14,7 @@
 //     FIBE_USER=... node scratch-fibe.mjs fetchPositions
 //     FIBE_USER=... node scratch-fibe.mjs fetchFundingHistory
 //     FIBE_USER=... FIBE_SINCE='2026-07-08T21:00:00Z' FIBE_UNTIL='2026-07-08T22:00:00Z' node scratch-fibe.mjs fetchMyTrades
+//     FIBE_USER=... FIBE_SYMBOL=ETH/USDC FIBE_ORDER_ID=... node scratch-fibe.mjs fetchOrder
 //     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_SIDE=buy FIBE_AMOUNT=0.01 FIBE_PRICE=1000 node scratch-fibe.mjs createOrder
 //     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_ORDER_ID=... node scratch-fibe.mjs cancelOrder
 //     FIBE_USER=... FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC node scratch-fibe.mjs inspectLocalOrderTx
@@ -47,6 +48,7 @@ const available = [
     'fetchFundingRates',
     'fetchFundingHistory',
     'fetchTradingFee',
+    'fetchOrder',
     'fetchOpenOrders',
     'fetchOrders',
     'createOrder',
@@ -464,6 +466,14 @@ async function main () {
         const tradingFee = await fibe.fetchTradingFee (sym, { user });
         assert (tradingFee['symbol'] === sym, 'trading fee symbol mismatch');
         print ('fetchTradingFee', tradingFee);
+    }
+
+    if (shouldRun ('fetchOrder')) {
+        const fetchOrderSymbol = process.env.FIBE_SYMBOL || sym;
+        assert (markets[fetchOrderSymbol] !== undefined, 'unknown symbol ' + fetchOrderSymbol);
+        const order = await fibe.fetchOrder (env ('FIBE_ORDER_ID'), fetchOrderSymbol, { user });
+        assert (order['id'] === process.env.FIBE_ORDER_ID, 'fetchOrder id mismatch');
+        print ('fetchOrder', order);
     }
 
     if (shouldRun ('fetchOpenOrders')) {

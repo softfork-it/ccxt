@@ -18,6 +18,7 @@ interface Exchange {
     publicGetL2book (params?: {}): Promise<implicitReturnType>;
     publicGetRecentMarketTrades (params?: {}): Promise<implicitReturnType>;
     publicGetCandles (params?: {}): Promise<implicitReturnType>;
+    publicGetOrder (params?: {}): Promise<implicitReturnType>;
     publicGetOpenOrders (params?: {}): Promise<implicitReturnType>;
     publicGetHistoricalOrders (params?: {}): Promise<implicitReturnType>;
     publicGetSpotState (params?: {}): Promise<implicitReturnType>;
