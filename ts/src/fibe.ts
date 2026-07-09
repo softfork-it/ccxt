@@ -35,6 +35,7 @@ export default class fibe extends Exchange {
                 'future': false,
                 'option': false,
                 'cancelOrder': true,
+                'cancelOrders': true,
                 'createOrder': true,
                 'fetchBalance': true,
                 'fetchCurrencies': false,
@@ -1405,6 +1406,27 @@ export default class fibe extends Exchange {
             'fee': undefined,
             'trades': undefined,
         }, market);
+    }
+
+    async cancelOrders (ids: string[], symbol: Str = undefined, params = {}): Promise<Order[]> {
+        /**
+         * @method
+         * @name fibe#cancelOrders
+         * @description cancels multiple normal-user resting orders by submitting one local Solana cancellation transaction per id
+         * @param {string[]} ids order ids
+         * @param {string} symbol unified market symbol
+         * @param {object} [params] extra parameters specific to the exchange API endpoint, same as cancelOrder()
+         * @returns {Order[]} a list of order structures
+         */
+        if (symbol === undefined) {
+            throw new ArgumentsRequired (this.id + ' cancelOrders() requires a symbol for local tx construction');
+        }
+        const orders: Order[] = [];
+        for (let i = 0; i < ids.length; i++) {
+            const order = await this.cancelOrder (ids[i], symbol, this.extend ({}, params));
+            orders.push (order);
+        }
+        return orders;
     }
 
     parseOrder (order: Dict, market: Market = undefined): Order {
