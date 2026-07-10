@@ -1018,8 +1018,14 @@ export default class fibe extends Exchange {
         const request = {
             'user': userAddress,
         };
+        if (market !== undefined) {
+            const info = market['info'];
+            request['mi'] = this.safeString(info, 'mi');
+            request['mt'] = this.safeString(info, 'mt');
+        }
         const response = await this.publicGetOpenOrders(this.extend(request, params));
-        return this.parseOrders(response, market, since, limit);
+        const orders = this.parseOrders(response, undefined, since, undefined);
+        return this.filterBySymbolSinceLimit(orders, symbol, since, limit);
     }
     async fetchOrders(symbol = undefined, since = undefined, limit = undefined, params = {}) {
         /**
@@ -1047,11 +1053,16 @@ export default class fibe extends Exchange {
         let page = undefined;
         [page, params] = this.handleOptionAndParams(params, 'fetchOrders', 'page');
         let pageSize = undefined;
-        const defaultPageSize = (symbol === undefined) ? limit : undefined;
+        const defaultPageSize = limit;
         [pageSize, params] = this.handleOptionAndParams(params, 'fetchOrders', 'pageSize', defaultPageSize);
         const request = {
             'user': userAddress,
         };
+        if (market !== undefined) {
+            const info = market['info'];
+            request['mi'] = this.safeString(info, 'mi');
+            request['mt'] = this.safeString(info, 'mt');
+        }
         if (page !== undefined) {
             request['page'] = page;
         }
@@ -1059,7 +1070,8 @@ export default class fibe extends Exchange {
             request['pageSize'] = pageSize;
         }
         const response = await this.publicGetHistoricalOrders(this.extend(request, params));
-        return this.parseOrders(response, market, since, limit);
+        const orders = this.parseOrders(response, undefined, since, undefined);
+        return this.filterBySymbolSinceLimit(orders, symbol, since, limit);
     }
     async fetchClosedOrders(symbol = undefined, since = undefined, limit = undefined, params = {}) {
         /**
