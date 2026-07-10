@@ -236,7 +236,6 @@ export default class fibe extends Exchange {
     };
     solanaTokenProgramCache(): import("./base/types.js").Dictionary<any>;
     solanaGetTokenProgram(rpcUrl: any, mint: any, tokenProgram?: any, commitment?: string): Promise<string>;
-    solanaAccountExists(rpcUrl: any, pubkey: any, commitment?: string): Promise<boolean>;
     solanaGetAccountData(rpcUrl: any, pubkey: any, commitment?: string): Promise<string>;
     solanaGetAccountInfo(rpcUrl: any, pubkey: any, commitment?: string): Promise<Dict>;
     solanaSignAndSend(rpcUrl: any, payer: any, privateKeyHex: any, instructions: any, params?: {}): Promise<Dict>;

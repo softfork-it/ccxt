@@ -2765,7 +2765,7 @@ export default class fibe extends Exchange {
                 this.solanaAccount (this.solanaSystemProgramId ()),
                 this.solanaAccount (tokenProgram),
             ],
-            'data': '',
+            'data': this.solanaU8Hex (1),
         };
     }
 
@@ -3142,10 +3142,7 @@ export default class fibe extends Exchange {
                 ataMint = this.safeString (market, 'baseMint');
                 ataTokenProgram = tokenProgramBase;
             }
-            const ataExists = await this.solanaAccountExists (rpcUrl, ataToCreate, commitment);
-            if (!ataExists) {
-                ixs.push (this.solanaCreateAssociatedTokenAccountIx (owner, ataToCreate, owner, ataMint, ataTokenProgram));
-            }
+            ixs.push (this.solanaCreateAssociatedTokenAccountIx (owner, ataToCreate, owner, ataMint, ataTokenProgram));
             ixs.push (this.fibeSpotPlaceOrderIx ({
                 'owner': owner,
                 'ownerSubAccountState': this.fibeGetSubAccountStatePda (owner, 0),
@@ -3177,10 +3174,7 @@ export default class fibe extends Exchange {
                 ownerQuoteTokenAccount = this.solanaGetAssociatedTokenAddress (this.safeString (market, 'quoteMint'), owner, tokenProgramQuote);
             }
             if (ownerQuoteTokenAccount !== undefined) {
-                const ownerQuoteTokenAccountExists = await this.solanaAccountExists (rpcUrl, ownerQuoteTokenAccount, commitment);
-                if (!ownerQuoteTokenAccountExists) {
-                    ixs.push (this.solanaCreateAssociatedTokenAccountIx (owner, ownerQuoteTokenAccount, owner, this.safeString (market, 'quoteMint'), tokenProgramQuote));
-                }
+                ixs.push (this.solanaCreateAssociatedTokenAccountIx (owner, ownerQuoteTokenAccount, owner, this.safeString (market, 'quoteMint'), tokenProgramQuote));
             }
             const isCrossMargin = (marginMode === 'cross');
             ixs.push (this.fibePerpPlaceOrderIx ({
@@ -3329,11 +3323,6 @@ export default class fibe extends Exchange {
         const owner = accountInfo['owner'];
         tokenPrograms[mint] = owner;
         return owner;
-    }
-
-    async solanaAccountExists (rpcUrl, pubkey, commitment = 'confirmed'): Promise<boolean> {
-        const accountInfo = await this.solanaGetAccountInfo (rpcUrl, pubkey, commitment);
-        return accountInfo !== undefined;
     }
 
     async solanaGetAccountData (rpcUrl, pubkey, commitment = 'confirmed'): Promise<string> {
