@@ -16,6 +16,19 @@ const rpcUrl = 'https://api.devnet.solana.com';
 const tokenProgram = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const spotTickArray = '4fFJyphLe6tPCzEiVBxESwYSRBumJ4W76srcYs6Tj5Cn';
 const perpTickArray = 'FB6JhTAfMddLKqPhiUjcpfnmbfMJXTMST81CxmUTtMqn';
+// Encoded once with the TS SDK codecs; do not regenerate these with CCXT helpers.
+const spotOpenOrdersAccount = 'IwAAAAAAAAABAAAAAAAAAAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3AAABAAAAAAAAAAAAAQAAAAEAAAAAAAAACM3iwZPrL9ZS1czOuDR+SyRt8vbPQS31BsPFGhS5l/cVzVsHAAAAAAAAAAAAAAAA6EUAAAAAAAAAAAAAAAEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
+const perpOpenOrdersAccount = 'RAAAAAAAAAABAAAAAAAAAAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3AgABAAAAAAAAAAAAAQAAAAEAAAAAAAAACM3iwZPrL9ZS1czOuDR+SyRt8vbPQS31BsPFGhS5l/cVrlENAAAAAAAAAAAAAAAA7UUAAAAAAAAAAAIDBQH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+const expectedPdas = {
+    'userState': 'VKGncjFHa1T9yerW2f3nAsa3eT4ntr3G2VSoren9nma',
+    'spotSubAccountState': '8dPLmk7dRxj8QXyKCQiLSB9g1CivTEFa5nxEQCoJHCeM',
+    'perpSubAccountState': '78hdemZkp7UJJ5Er2ssMzy3gxaUMqjuFYBZosLKkanVX',
+    'spotOpenOrders': 'BRjLYpTBjbuHN35TNSZ2s1GzueXqK1ir8RFhaY6FbVAZ',
+    'perpOpenOrders': 'J6tocuh7YnJog8J11772FBL7PHJHJ1rnVqnjTcSvczTq',
+    'perpMarginAccount': 'AwGFPtHXWkWhLqDkGjhCCSMJ33VskHAN4hMc1pMvK1cQ',
+    'spotTickArray': '8QLaRGWEV3dSB28unyLsYwYnPyun1un1wx3mZAdu4bLU',
+    'perpTickArray': 'J25EFKMK5acu218nhzdwAPihXHb4UuydqWFJRhBguHQR',
+};
 const rawMarkets = [
     {
         'marketPubkey': 'Cwz8UtKVh4sAVQnHdeZFB3dDJfVE7Wd8idDV3Ux466dX',
@@ -61,21 +74,9 @@ function createExchange() {
         'privateKey': testPrivateKey,
     });
     exchange.setMarkets(exchange.parseMarkets(rawMarkets));
-    const replaceHex = (hex, byteOffset, value) => {
-        return hex.slice(0, byteOffset * 2) + value + hex.slice((byteOffset * 2) + value.length);
-    };
-    const openOrdersAccountData = (mt, orderId, priceInTicks) => {
-        const orderSize = (mt === 'S') ? 144 : 160;
-        let hex = '00'.repeat(64 + orderSize);
-        hex = replaceHex(hex, 60, exchange.solanaU32leHex(1));
-        hex = replaceHex(hex, 64 + 40, exchange.solanaU64leHex(orderId));
-        hex = replaceHex(hex, 64 + 56, exchange.solanaU64leHex(priceInTicks));
-        hex = replaceHex(hex, 64 + 69, exchange.solanaU8Hex(1));
-        return exchange.binaryToBase64(exchange.base16ToBinary(hex));
-    };
     const accountDataByPubkey = {};
-    accountDataByPubkey[exchange.fibeGetOpenOrdersPerMarketPda('S', walletAddress, 0, '1')] = openOrdersAccountData('S', '123456789', '17896');
-    accountDataByPubkey[exchange.fibeGetOpenOrdersPerMarketPda('P', walletAddress, 2, '1')] = openOrdersAccountData('P', '223456789', '17901');
+    accountDataByPubkey[expectedPdas['spotOpenOrders']] = spotOpenOrdersAccount;
+    accountDataByPubkey[expectedPdas['perpOpenOrders']] = perpOpenOrdersAccount;
     const requests = [];
     exchange.solanaRpc = async (url, method, params) => {
         requests.push({
@@ -202,6 +203,7 @@ function assertSendTransaction(requests, expectedTransaction, expectedSendOption
     assert(request['method'] === 'sendTransaction');
     const exchange = createExchange()['exchange'];
     assert.deepStrictEqual(transactionSemantics(exchange, request['params'][0]), transactionSemantics(exchange, expectedTransaction));
+    assert(request['params'][0] === expectedTransaction);
     assert.deepStrictEqual(request['params'][1], expectedSendOptions);
 }
 async function assertRejectsWithName(description, call, errorName) {
@@ -223,6 +225,18 @@ function assertThrowsWithName(description, call, errorName) {
     }
 }
 async function testFibeLocalTx() {
+    {
+        const { exchange } = createExchange();
+        const quoteMint = rawMarkets[0]['quoteMint'];
+        assert(exchange.fibeGetUserStatePda(walletAddress) === expectedPdas['userState']);
+        assert(exchange.fibeGetSubAccountStatePda(walletAddress, 0) === expectedPdas['spotSubAccountState']);
+        assert(exchange.fibeGetSubAccountStatePda(walletAddress, 2) === expectedPdas['perpSubAccountState']);
+        assert(exchange.fibeGetOpenOrdersPerMarketPda('S', walletAddress, 0, '1') === expectedPdas['spotOpenOrders']);
+        assert(exchange.fibeGetOpenOrdersPerMarketPda('P', walletAddress, 2, '1') === expectedPdas['perpOpenOrders']);
+        assert(exchange.fibeGetUserMarginAccountPda(walletAddress, 2, quoteMint) === expectedPdas['perpMarginAccount']);
+        assert(exchange.fibeGetTickArrayPda('S', '1', '17896') === expectedPdas['spotTickArray']);
+        assert(exchange.fibeGetTickArrayPda('P', '1', '17901') === expectedPdas['perpTickArray']);
+    }
     {
         const { exchange } = createExchange();
         exchange.randomBytes = () => '0102030405060708';
