@@ -3268,11 +3268,11 @@ export default class fibe extends Exchange {
             'method': method,
             'params': params,
         }));
-        if (response['error'] !== undefined) {
-            const error = response['error'];
+        const error = this.safeValue(response, 'error');
+        if (error !== undefined) {
             throw new ExchangeError(this.id + ' Solana RPC ' + method + ' failed: ' + this.json(error));
         }
-        return response['result'];
+        return this.safeValue(response, 'result');
     }
     parseOrderStatus(status) {
         const statuses = {
