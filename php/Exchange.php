@@ -1392,6 +1392,15 @@ class Exchange {
         return static::binary_to_base64(static::base16_to_binary($signature->toHex()));
     }
 
+    public static function eddsa_public_key($secret, $algorithm = 'ed25519') {
+        if (strlen($secret) !== 32) {
+            throw new Exception('Ed25519 secret must be 32 bytes');
+        }
+        $curve = new EdDSA($algorithm);
+        $public_key_hex = $curve->keyFromSecret(bin2hex($secret))->getPublic('hex');
+        return hex2bin($public_key_hex);
+    }
+
     public static function random_bytes($length) {
         return bin2hex(random_bytes($length));
     }

@@ -2084,7 +2084,12 @@ export default class fibe extends Exchange {
         if (secretKeyHex.length !== 128) {
             throw new ExchangeError (this.id + ' invalid Solana secret key length ' + this.numberToString (secretKeyHex.length / 2));
         }
-        return this.binaryToBase58 (this.base16ToBinary (secretKeyHex.slice (64, 128)));
+        const publicKey = this.eddsaPublicKey (this.base16ToBinary (secretKeyHex.slice (0, 64)), ed25519);
+        const publicKeyHex = this.binaryToBase16 (publicKey);
+        if (publicKeyHex !== secretKeyHex.slice (64, 128)) {
+            throw new AuthenticationError (this.id + ' invalid Solana secret key: public key does not match seed');
+        }
+        return this.binaryToBase58 (publicKey);
     }
 
     solanaParsePrivateKeyHex (privateKey, user = undefined) {

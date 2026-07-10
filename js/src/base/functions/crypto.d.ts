@@ -12,5 +12,6 @@ declare function ecdsa(request: Hex, secret: Hex, curve: CurveFn, prehash?: CHas
 };
 declare function axolotl(request: Hex, secret: Hex, curve: CurveFnEDDSA): string;
 declare function eddsa(request: Hex, secret: Input, curve: CurveFnEDDSA): string;
+declare function eddsaPublicKey(secret: Input, curve: CurveFnEDDSA): Uint8Array;
 declare function crc32(str: any, signed?: boolean): number;
-export { hash, hmac, crc32, ecdsa, eddsa, axolotl, };
+export { hash, hmac, crc32, ecdsa, eddsa, eddsaPublicKey, axolotl, };

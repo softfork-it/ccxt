@@ -282,6 +282,7 @@ async function testFibeLocalTx() {
         assert(!exchange.fibeIsUnsignedIntegerString('1.2'));
         assertThrowsWithName('expected Solana private key parser to reject seed-only hex', () => exchange.solanaParsePrivateKeyHex(seedHex, walletAddress), 'ExchangeError');
         assertThrowsWithName('expected Solana private key parser to reject seed-only base58', () => exchange.solanaParsePrivateKeyHex(exchange.binaryToBase58(exchange.base16ToBinary(seedHex)), walletAddress), 'ExchangeError');
+        assertThrowsWithName('expected Solana private key parser to reject a spliced keypair', () => exchange.solanaParsePrivateKeyHex(seedHex + '00'.repeat(32), '11111111111111111111111111111111'), 'AuthenticationError');
         try {
             exchange.solanaParsePrivateKeyHex('[256]');
             assert(false, 'expected Solana private key parser to reject invalid byte');

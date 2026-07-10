@@ -22,7 +22,7 @@ import { Future } from './ws/Future.js';
 import { OrderBook as WsOrderBook, IndexedOrderBook, CountedOrderBook } from './ws/OrderBook.js';
 // ----------------------------------------------------------------------------
 //
-import { axolotl } from './functions/crypto.js';
+import { axolotl, eddsaPublicKey } from './functions/crypto.js';
 import { totp } from './functions/totp.js';
 import ethers from '../static_dependencies/ethers/index.js';
 import { TypedDataEncoder } from '../static_dependencies/ethers/hash/index.js';
@@ -1322,6 +1322,9 @@ export default class Exchange {
     }
     axolotl(payload, hexKey, ed25519) {
         return axolotl(payload, hexKey, ed25519);
+    }
+    eddsaPublicKey(secret, ed25519) {
+        return eddsaPublicKey(secret, ed25519);
     }
     fixStringifiedJsonMembers(content) {
         // used for instance in bingx

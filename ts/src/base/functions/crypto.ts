@@ -113,6 +113,13 @@ function eddsa (request: Hex, secret: Input, curve: CurveFnEDDSA) {
     return base64.encode (signature)
 }
 
+function eddsaPublicKey (secret: Input, curve: CurveFnEDDSA) {
+    if (secret.length !== 32) {
+        throw new Error ('Ed25519 secret must be 32 bytes');
+    }
+    return curve.getPublicKey (secret);
+}
+
 /*  ------------------------------------------------------------------------ */
 
 // source: https://stackoverflow.com/a/18639975/1067003
@@ -144,6 +151,7 @@ export {
     crc32,
     ecdsa,
     eddsa,
+    eddsaPublicKey,
     axolotl,
 };
 

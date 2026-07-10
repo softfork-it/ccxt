@@ -105,6 +105,12 @@ function eddsa(request, secret, curve) {
     const signature = curve.sign(request, privateKey);
     return base64.encode(signature);
 }
+function eddsaPublicKey(secret, curve) {
+    if (secret.length !== 32) {
+        throw new Error('Ed25519 secret must be 32 bytes');
+    }
+    return curve.getPublicKey(secret);
+}
 /*  ------------------------------------------------------------------------ */
 // source: https://stackoverflow.com/a/18639975/1067003
 function crc32(str, signed = false) {
@@ -127,5 +133,5 @@ function crc32(str, signed = false) {
     }
 }
 /*  ------------------------------------------------------------------------ */
-export { hash, hmac, crc32, ecdsa, eddsa, axolotl, };
+export { hash, hmac, crc32, ecdsa, eddsa, eddsaPublicKey, axolotl, };
 /*  ------------------------------------------------------------------------ */
