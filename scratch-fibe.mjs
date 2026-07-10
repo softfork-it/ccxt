@@ -618,8 +618,19 @@ async function main () {
         print ('liveCreateCancelOrder.cancelSignatureStatus', cancelStatus);
         const openOrdersAfterCancel = await waitForOrderPresence (fibe, input.symbol, userAddress, orderId, false);
         print ('liveCreateCancelOrder.openOrdersAfterCancel', openOrdersAfterCancel.filter ((order) => orderMatchesId (order, orderId)));
+        const canceledOrders = await fibe.fetchCanceledOrders (input.symbol, undefined, 50, { user: userAddress });
+        const canceledOrder = canceledOrders.find ((order) => orderMatchesId (order, orderId));
+        assert (canceledOrder !== undefined, 'canceled order missing from fetchCanceledOrders');
+        assert (canceledOrder['status'] === 'canceled', 'fetchCanceledOrders status mismatch');
+        print ('liveCreateCancelOrder.fetchCanceledOrders', [ canceledOrder ]);
+        const fetchedOrder = await fibe.fetchOrder (orderId, input.symbol, { user: userAddress });
+        assert (fetchedOrder['status'] === 'canceled', 'fetchOrder canceled status mismatch');
+        print ('liveCreateCancelOrder.fetchOrderAfterCancel', fetchedOrder);
         const historicalOrders = await fibe.fetchOrders (input.symbol, undefined, 10, { user: userAddress });
-        print ('liveCreateCancelOrder.historicalOrder', historicalOrders.filter ((order) => orderMatchesId (order, orderId)));
+        const historicalOrder = historicalOrders.find ((order) => orderMatchesId (order, orderId));
+        assert (historicalOrder !== undefined, 'canceled order missing from fetchOrders');
+        assert (historicalOrder['status'] === 'canceled', 'fetchOrders canceled status mismatch');
+        print ('liveCreateCancelOrder.historicalOrder', [ historicalOrder ]);
     }
 
     if (shouldRun ('liveFailureChecks')) {
