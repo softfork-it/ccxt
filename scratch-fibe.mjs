@@ -15,6 +15,8 @@
 //     FIBE_USER=... node scratch-fibe.mjs fetchFundingHistory
 //     FIBE_USER=... FIBE_SINCE='2026-07-08T21:00:00Z' FIBE_UNTIL='2026-07-08T22:00:00Z' node scratch-fibe.mjs fetchMyTrades
 //     FIBE_USER=... FIBE_SYMBOL=ETH/USDC FIBE_ORDER_ID=... node scratch-fibe.mjs fetchOrder
+//     FIBE_USER=... FIBE_SYMBOL=ETH/USDC node scratch-fibe.mjs fetchClosedOrders
+//     FIBE_USER=... FIBE_SYMBOL=ETH/USDC node scratch-fibe.mjs fetchCanceledOrders
 //     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_SIDE=buy FIBE_AMOUNT=0.01 FIBE_PRICE=1000 node scratch-fibe.mjs createOrder
 //     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_ORDER_ID=... node scratch-fibe.mjs cancelOrder
 //     FIBE_ENABLE_TRADING=1 FIBE_PRIVATE_KEY=... FIBE_SYMBOL=ETH/USDC FIBE_ORDER_IDS=1,2 node scratch-fibe.mjs cancelOrders
@@ -53,6 +55,8 @@ const available = [
     'fetchOrder',
     'fetchOpenOrders',
     'fetchOrders',
+    'fetchClosedOrders',
+    'fetchCanceledOrders',
     'createOrder',
     'cancelOrder',
     'cancelOrders',
@@ -492,6 +496,22 @@ async function main () {
         assert (Array.isArray (orders), 'expected historical orders array');
         assert (orders.length <= 2, 'historical orders limit failed');
         print ('fetchOrders', orders);
+    }
+
+    if (shouldRun ('fetchClosedOrders')) {
+        const orders = await fibe.fetchClosedOrders (process.env.FIBE_SYMBOL, undefined, 2, { user });
+        assert (Array.isArray (orders), 'expected closed orders array');
+        assert (orders.length <= 2, 'closed orders limit failed');
+        assert (orders.every ((order) => order['status'] === 'closed'), 'closed order status mismatch');
+        print ('fetchClosedOrders', orders);
+    }
+
+    if (shouldRun ('fetchCanceledOrders')) {
+        const orders = await fibe.fetchCanceledOrders (process.env.FIBE_SYMBOL, undefined, 2, { user });
+        assert (Array.isArray (orders), 'expected canceled orders array');
+        assert (orders.length <= 2, 'canceled orders limit failed');
+        assert (orders.every ((order) => order['status'] === 'canceled'), 'canceled order status mismatch');
+        print ('fetchCanceledOrders', orders);
     }
 
     if (shouldRun ('createOrder')) {

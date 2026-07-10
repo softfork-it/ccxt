@@ -40,6 +40,8 @@ export default class fibe extends Exchange {
                 'cancelOrders': true,
                 'createOrder': true,
                 'fetchBalance': true,
+                'fetchCanceledOrders': true,
+                'fetchClosedOrders': true,
                 'fetchCurrencies': false,
                 'fetchFundingHistory': true,
                 'fetchFundingRate': true,
@@ -1030,8 +1032,9 @@ export default class fibe extends Exchange {
          * @param {int} [limit] the maximum number of order structures to retrieve
          * @param {object} [params] extra parameters specific to the exchange API endpoint
          * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {string} [params.status] raw status filter, "F" for closed/filled orders or "C" for canceled orders
          * @param {int} [params.page] page number, default is 1
-         * @param {int} [params.pageSize] page size, default is limit when provided
+         * @param {int} [params.pageSize] page size, defaults to limit when provided without a symbol
          * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
          */
         let userAddress = undefined;
@@ -1044,7 +1047,8 @@ export default class fibe extends Exchange {
         let page = undefined;
         [page, params] = this.handleOptionAndParams(params, 'fetchOrders', 'page');
         let pageSize = undefined;
-        [pageSize, params] = this.handleOptionAndParams(params, 'fetchOrders', 'pageSize', limit);
+        const defaultPageSize = (symbol === undefined) ? limit : undefined;
+        [pageSize, params] = this.handleOptionAndParams(params, 'fetchOrders', 'pageSize', defaultPageSize);
         const request = {
             'user': userAddress,
         };
@@ -1056,6 +1060,42 @@ export default class fibe extends Exchange {
         }
         const response = await this.publicGetHistoricalOrders(this.extend(request, params));
         return this.parseOrders(response, market, since, limit);
+    }
+    async fetchClosedOrders(symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        /**
+         * @method
+         * @name fibe#fetchClosedOrders
+         * @description fetch all closed orders
+         * @see https://fb-4b8448ac.alephium.org/api/v1/historical-orders
+         * @param {string} symbol unified market symbol
+         * @param {int} [since] the earliest time in ms to fetch closed orders for
+         * @param {int} [limit] the maximum number of closed order structures to retrieve
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {int} [params.page] page number, default is 1
+         * @param {int} [params.pageSize] page size
+         * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
+         */
+        params = this.extend(params, { 'status': 'F' });
+        return await this.fetchOrders(symbol, since, limit, params);
+    }
+    async fetchCanceledOrders(symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        /**
+         * @method
+         * @name fibe#fetchCanceledOrders
+         * @description fetch all canceled orders
+         * @see https://fb-4b8448ac.alephium.org/api/v1/historical-orders
+         * @param {string} symbol unified market symbol
+         * @param {int} [since] the earliest time in ms to fetch canceled orders for
+         * @param {int} [limit] the maximum number of canceled order structures to retrieve
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {int} [params.page] page number, default is 1
+         * @param {int} [params.pageSize] page size
+         * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
+         */
+        params = this.extend(params, { 'status': 'C' });
+        return await this.fetchOrders(symbol, since, limit, params);
     }
     async fetchCreateOrderMarketReferencePrice(market) {
         const allMids = await this.publicGetAllMids();
