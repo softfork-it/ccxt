@@ -593,6 +593,7 @@ async function testFibeLocalTx() {
     }
     {
         const { exchange, requests } = createExchange();
+        exchange.market('ETH/USDC:USDC')['info']['baseMint'] = exchange.solanaNativeMint();
         const order = await exchange.createOrder('ETH/USDC:USDC', 'limit', 'sell', 0.00003, 1790.1, {
             'rpcUrl': rpcUrl,
             'orderId': '223456789',
@@ -614,6 +615,7 @@ async function testFibeLocalTx() {
     }
     {
         const { exchange, requests } = createExchange();
+        exchange.market('ETH/USDC:USDC')['info']['baseMint'] = exchange.solanaNativeMint();
         const order = await exchange.cancelOrder('223456789', 'ETH/USDC:USDC', {
             'rpcUrl': rpcUrl,
             'subAccountIndex': 2,

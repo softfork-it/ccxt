@@ -3113,10 +3113,10 @@ export default class fibe extends Exchange {
 
     async fibeLocalTxCreateOrder (params): Promise<Dict> {
         const market = this.fibeTxParseMarket (params['market']);
-        if ((market['baseMint'] === this.solanaNativeMint ()) || (market['quoteMint'] === this.solanaNativeMint ())) {
+        const mt = this.safeString (market, 'mt');
+        if ((mt === 'S') && ((market['baseMint'] === this.solanaNativeMint ()) || (market['quoteMint'] === this.solanaNativeMint ()))) {
             throw new ExchangeError (this.id + ' local Fibe transaction construction does not support native SOL wrapping');
         }
-        const mt = this.safeString (market, 'mt');
         const mi = this.safeString (market, 'mi');
         let marginMode = this.safeString (params, 'marginMode', 'cross');
         if (mt === 'P') {
@@ -3227,10 +3227,10 @@ export default class fibe extends Exchange {
 
     async fibeLocalTxCancelOrder (params): Promise<Dict> {
         const market = this.fibeTxParseMarket (params['market']);
-        if ((market['baseMint'] === this.solanaNativeMint ()) || (market['quoteMint'] === this.solanaNativeMint ())) {
+        const mt = this.safeString (market, 'mt');
+        if ((mt === 'S') && ((market['baseMint'] === this.solanaNativeMint ()) || (market['quoteMint'] === this.solanaNativeMint ()))) {
             throw new ExchangeError (this.id + ' local Fibe transaction construction does not support native SOL wrapping');
         }
-        const mt = this.safeString (market, 'mt');
         const mi = this.safeString (market, 'mi');
         const owner = this.safeString (params, 'user');
         const privateKeyHex = this.solanaParsePrivateKeyHex (this.safeString (params, 'privateKey'), owner);
