@@ -29,6 +29,17 @@ const expectedPdas = {
     'spotTickArray': '8QLaRGWEV3dSB28unyLsYwYnPyun1un1wx3mZAdu4bLU',
     'perpTickArray': 'J25EFKMK5acu218nhzdwAPihXHb4UuydqWFJRhBguHQR',
 };
+// Expected by solana_pubkey::bytes_are_curve_point; hash vectors use SHA-256("fibe-curve-vector-N").
+const curvePointVectors = [
+    { 'name': 'Ed25519 basepoint', 'hex': '5866666666666666666666666666666666666666666666666666666666666666', 'onCurve': true },
+    { 'name': 'identity', 'hex': '01' + '00'.repeat(31), 'onCurve': true },
+    { 'name': 'negative-zero identity', 'hex': '01' + '00'.repeat(30) + '80', 'onCurve': true },
+    { 'name': 'non-canonical field element p', 'hex': 'ed' + 'ff'.repeat(30) + '7f', 'onCurve': true },
+    { 'name': 'hash 0', 'hex': 'dc1a9fa1f50923c39ba07cac584f39edadac97f4c2f9da07f361be6d63f9c79a', 'onCurve': false },
+    { 'name': 'hash 1', 'hex': 'f6c94dcd7ed588518da78b58ead7dafbe2b2835e7af84f47a4eefb24b705f102', 'onCurve': false },
+    { 'name': 'hash 5', 'hex': '544e9e41211a6c230b638598b26fdb7874bd5390ee16c59d0b304f61f37256e3', 'onCurve': true },
+    { 'name': 'hash 13', 'hex': '9347d96440a488e810b172703a565ce7f4445b7a07dee886188dd030e06b4683', 'onCurve': true },
+];
 const rawMarkets = [
     {
         'marketPubkey': 'Cwz8UtKVh4sAVQnHdeZFB3dDJfVE7Wd8idDV3Ux466dX',
@@ -225,6 +236,19 @@ function assertThrowsWithName(description, call, errorName) {
     }
 }
 async function testFibeLocalTx() {
+    {
+        const { exchange } = createExchange();
+        for (let i = 0; i < curvePointVectors.length; i++) {
+            const vector = curvePointVectors[i];
+            assert(exchange.solanaIsOnCurveHex(vector['hex']) === vector['onCurve'], vector['name']);
+        }
+        assert(!exchange.solanaIsOnCurveHex('00'.repeat(31)));
+        const pdaNames = Object.keys(expectedPdas);
+        for (let i = 0; i < pdaNames.length; i++) {
+            const name = pdaNames[i];
+            assert(!exchange.solanaIsOnCurveHex(exchange.solanaPubkeyHex(expectedPdas[name])), name);
+        }
+    }
     {
         const { exchange } = createExchange();
         const quoteMint = rawMarkets[0]['quoteMint'];
