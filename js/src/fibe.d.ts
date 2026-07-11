@@ -100,6 +100,11 @@ export default class fibe extends Exchange {
     solanaFindProgramAddress(seeds: any, programId: any): string;
     fibePda(seeds: any, programId?: any): string;
     fibeGetUserStatePda(user: any): string;
+    fibeCalculateEncodedUserId(owner: any): string;
+    fibeGetDexConfigPda(): string;
+    fibeGetUserIdPda(owner: any): string;
+    fibeGetAccountLabelHex(owner: any, subAccountIndex: any): string;
+    fibeGetAccountLabelPda(owner: any, subAccountIndex: any): string;
     fibeGetSubAccountStatePda(owner: any, subAccountIndex: any): string;
     fibeGetUserMarginAccountPda(owner: any, subAccountIndex: any, quoteMint: any): string;
     fibeGetOpenOrdersPerMarketPda(mt: any, owner: any, subAccountIndex: any, mi: any): string;
@@ -121,7 +126,8 @@ export default class fibe extends Exchange {
         askTickLowerBound: any;
         bidTickUpperBound: any;
     };
-    fibeTickArrayStride(mt: any): 64 | 80;
+    fibeTickArrayStride(mt: any): 48 | 64;
+    fibeTickArraySideBit(hex: any, tickIndex: any): 0 | 1 | -1;
     fibeDecodeTickArrayState(mt: any, data: any): {
         startTick: number;
         ticks: any[];
@@ -150,6 +156,15 @@ export default class fibe extends Exchange {
         }[];
         data: string;
     };
+    solanaCreateAssociatedTokenAccountIfNeeded(rpcUrl: any, payer: any, owner: any, mint: any, tokenProgram: any, commitment?: string): Promise<{
+        programId: string;
+        accounts: {
+            pubkey: any;
+            isWritable: boolean;
+            isSigner: boolean;
+        }[];
+        data: string;
+    }>;
     solanaSystemTransferIx(source: any, destination: any, lamports: any): {
         programId: string;
         accounts: {
@@ -189,6 +204,24 @@ export default class fibe extends Exchange {
         }[];
         data: string;
     };
+    fibeInitUserIx(owner: any, subAccountIndex: any): {
+        programId: string;
+        accounts: {
+            pubkey: any;
+            isWritable: boolean;
+            isSigner: boolean;
+        }[];
+        data: string;
+    };
+    fibeInitUserIfNeeded(rpcUrl: any, owner: any, subAccountIndex: any, commitment?: string): Promise<{
+        programId: string;
+        accounts: {
+            pubkey: any;
+            isWritable: boolean;
+            isSigner: boolean;
+        }[];
+        data: string;
+    }>;
     fibeSpotCloseRestingOrderIx(input: any): {
         programId: string;
         accounts: {

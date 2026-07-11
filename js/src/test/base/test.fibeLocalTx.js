@@ -20,14 +20,14 @@ const perpTickArray = 'FB6JhTAfMddLKqPhiUjcpfnmbfMJXTMST81CxmUTtMqn';
 const spotOpenOrdersAccount = 'IwAAAAAAAAABAAAAAAAAAAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3AAABAAAAAAAAAAAAAQAAAAEAAAAAAAAACM3iwZPrL9ZS1czOuDR+SyRt8vbPQS31BsPFGhS5l/cVzVsHAAAAAAAAAAAAAAAA6EUAAAAAAAAAAAAAAAEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
 const perpOpenOrdersAccount = 'RAAAAAAAAAABAAAAAAAAAAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3AgABAAAAAAAAAAAAAQAAAAEAAAAAAAAACM3iwZPrL9ZS1czOuDR+SyRt8vbPQS31BsPFGhS5l/cVrlENAAAAAAAAAAAAAAAA7UUAAAAAAAAAAAIDBQH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 const expectedPdas = {
-    'userState': 'VKGncjFHa1T9yerW2f3nAsa3eT4ntr3G2VSoren9nma',
-    'spotSubAccountState': '8dPLmk7dRxj8QXyKCQiLSB9g1CivTEFa5nxEQCoJHCeM',
-    'perpSubAccountState': '78hdemZkp7UJJ5Er2ssMzy3gxaUMqjuFYBZosLKkanVX',
-    'spotOpenOrders': 'BRjLYpTBjbuHN35TNSZ2s1GzueXqK1ir8RFhaY6FbVAZ',
-    'perpOpenOrders': 'J6tocuh7YnJog8J11772FBL7PHJHJ1rnVqnjTcSvczTq',
-    'perpMarginAccount': 'AwGFPtHXWkWhLqDkGjhCCSMJ33VskHAN4hMc1pMvK1cQ',
-    'spotTickArray': '8QLaRGWEV3dSB28unyLsYwYnPyun1un1wx3mZAdu4bLU',
-    'perpTickArray': 'J25EFKMK5acu218nhzdwAPihXHb4UuydqWFJRhBguHQR',
+    'userState': '4xXhMEGgMMQMr3VcYXANJhPUKhjNN8gTz35udhLZ7BkE',
+    'spotSubAccountState': 'GDyfEU3rHTGJr8t9S7Qt5BWCVAyR7raWbHCipWZcjFEJ',
+    'perpSubAccountState': 'GaTUQ91A6qUb73xTWAWo3Dbtk3YCWG7kKeySaRdFFkAg',
+    'spotOpenOrders': 'jgvSpHAPaMZ6u6jQY5JFXuvNemCyfaorgbaj7kovYd5',
+    'perpOpenOrders': 'F5tYLAnjCxHuBuuFR1resos1pbSxstChUVFCFQ1P3pjH',
+    'perpMarginAccount': 'FuDdxLcaAQZZMng7LtVXHqtzCrDbb93R7QegE5Pbymf1',
+    'spotTickArray': 'BERfWP161GaeF6wcY1ADkzHMonjDbAWfMehsT2Ld44qi',
+    'perpTickArray': '8baiTGtSFdKJm9LmNQ2nUKuQR8QXoJy6yKDqDKmtuNch',
 };
 // Expected by solana_pubkey::bytes_are_curve_point; hash vectors use SHA-256("fibe-curve-vector-N").
 const curvePointVectors = [
@@ -72,15 +72,15 @@ const rawMarkets = [
 ];
 // Reference transactions retained from SDK/Fibone parity verification.
 const expectedTransactions = {
-    'spotCreate': 'AUEJKTqUpk7/jLl3Xg7mZe7aLN3mJcKi+sPCqOTY4tvVIVfQ4wdqKL6goyKalFUu9zrHEi9uzBrmEgVvtbB1Xg6AAQAIEwjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaDZfT9fMG2MUytE7a+mAaPPFsz8UgFmuqWh6iSDznuyLUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xxU/qBGmjFB1l6tYrWAlHWtlEwYZSPJcs6W0W4geQ5kprqreiXLNCDHyQRKsNy0iHMqGaDh51FX6vLjR5IV8aqqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwivzYoqdRAYacI0+mIr5btSKLpJL+aXXbc/uxJ0Ujxqw7GGhAztDMdcaB6Gf5oCc+bqAAZPwdFh2OQFPIU57hMS70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAABt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkPL/G91oof0T6fP4YiI+3BisuhNjRKFQckM2ZBiDKKWlAKsLXQxF7tViIzK5xNbP94KYbGny4VyzVGLNqxUdH7jJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FnEUJQaE50iL4nCaTuiPRoEZE6K0fJCK9tQodWxPJ96l8ZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYEDAAFAuCTBAAMAAkD6AMAAAAAAAAQBgAHAA4LDQEBDxYLAAUBBg8PDw8PBwoJBAgRAg4SDQ0DJTgAAAAAAAAA6EUAAAAAAAAVzVsHAAAAAAAB0AcAAAAAAAAAAAAA',
-    'spotMarketCreate': 'ARdWlwmeJvy5Nnq4NuEacyCkj0uqdmY9sA023kclayG+48im5VzMof6kzJnPLf1fPp0joKhQ/EK9t0evjUBiVQKAAQAIEwjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaDZfT9fMG2MUytE7a+mAaPPFsz8UgFmuqWh6iSDznuyLUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xxU/qBGmjFB1l6tYrWAlHWtlEwYZSPJcs6W0W4geQ5kprqreiXLNCDHyQRKsNy0iHMqGaDh51FX6vLjR5IV8aqqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwivzYoqdRAYacI0+mIr5btSKLpJL+aXXbc/uxJ0Ujxqw7GGhAztDMdcaB6Gf5oCc+bqAAZPwdFh2OQFPIU57hMS70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAABt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkPL/G91oof0T6fP4YiI+3BisuhNjRKFQckM2ZBiDKKWlAKsLXQxF7tViIzK5xNbP94KYbGny4VyzVGLNqxUdH7jJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FnEUJQaE50iL4nCaTuiPRoEZE6K0fJCK9tQodWxPJ96l8ZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYEDAAFAuCTBAAMAAkD6AMAAAAAAAAQBgAHAA4LDQEBDxYLAAUBBg8PDw8PBwoJBAgRAg4SDQ0DJTgAAAAAAAAAZkkAAAAAAAAVj0cTAAAAAAAB0AcAAAAAAAAAAQAA',
-    'spotMarketCreateFromMid': 'AayabVU58ywneXBzmQaycgFHM7S7RLEDKccLHPh78QORzPlHKW+hGn5hjLMUdWoYzLaZIngelJml17Y469mIWQ2AAQAHEgjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaDZfT9fMG2MUytE7a+mAaPPFsz8UgFmuqWh6iSDznuyLUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xxU/qBGmjFB1l6tYrWAlHWtlEwYZSPJcs6W0W4geQ5kprqreiXLNCDHyQRKsNy0iHMqGaDh51FX6vLjR5IV8aqqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwivzYoqdRAYacI0+mIr5btSKLpJL+aXXbc/uxJ0Ujxqw7GGhAztDMdcaB6Gf5oCc+bqAAZPwdFh2OQFPIU57hMS70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpDy/xvdaKH9E+nz+GIiPtwYrLoTY0ShUHJDNmQYgyilpQCrC10MRe7VYiMyucTWz/eCmGxp8uFcs1RizasVHR+4yXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZxFCUGhOdIi+Jwmk7oj0aBGROitHyQivbUKHVsTyfepfGTw5UytIRaGytEtMgQM1yHQnHteUuX6M0MSGAnYnigIWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAg8GAAoAEQsMAQEOFgsABQEGDg4ODg4HCgkECBACDREMDAMlOAAAAAAAAABqQgAAAAAAABaPRxMAAAAAAQHQBwAAAAAAAAABAAA=',
-    'spotCreateMultiTickArrays': 'AaReInA9OmF/8Efz4Qp6q2LoVG4oO2pamHivexlrGPNCO5V5/ANtJCT86+NAFdSYd8/VvDGEGNTBDMtu6YNRBwqAAQAIFQjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaEMIq0QieMdOTL/9LxEgZlMWLwyaBikTCvjemcxoDRGyUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xt/E1MlA8yZ91OePWqP66Qq0mQRLWNlWddb0JKW5R3qXFT+oEaaMUHWXq1itYCUda2UTBhlI8lyzpbRbiB5DmSmuqt6Jcs0IMfJBEqw3LSIcyoZoOHnUVfq8uNHkhXxqqldetLNrFvVb5LwMBq2oCY7/sOX56OeRc8c74kM+RNtams/qgHPfBFxCsBhNHwzvgyjkDvJYS3dODKC8Df51MIr82KKnUQGGnCNPpiK+W7Uii6SS/ml123P7sSdFI8asOxhoQM7QzHXGgehn+aAnPm6gAGT8HRYdjkBTyFOe4TEu9LnL70l9RUEAAtb51QBBb1Xyd98c8V1FCnmcAy3V9HAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpDy/xvdaKH9E+nz+GIiPtwYrLoTY0ShUHJDNmQYgyilpQCrC10MRe7VYiMyucTWz/eCmGxp8uFcs1RizasVHR+4yXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZxFCUGhOdIi+Jwmk7oj0aBGROitHyQivbUKHVsTyfepfGTw5UytIRaGytEtMgQM1yHQnHteUuX6M0MSGAnYnigIWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWBA4ABQLgkwQADgAJA+gDAAAAAAAAEgYACQAQDQ8BAREYDQAGAQcREREREQkMCwQKEwIQFA8PCAMFJTgAAAAAAAAA6EUAAAAAAAAVzVsHAAAAAAAB0AcAAAAAAAAAAAAA',
-    'spotCancel': 'AbX/LvA5oSfJVwHc9pCtkFS2/NMq9jn8Vrgh99gwNNnpv2qT8/0WtA1HAd5Y7vEfQa2zyA0IEy10etiboYiHSACAAQAGEAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN1S4u691br2fz62My0tx/piCzXW84QpCN6TAwai5wzPbG38TUyUDzJn3U549ao/rpCrSZBEtY2VZ11vQkpblHepcVP6gRpoxQdZerWK1gJR1rZRMGGUjyXLOltFuIHkOZKa6q3olyzQgx8kESrDctIhzKhmg4edRV+ry40eSFfGqqms/qgHPfBFxCsBhNHwzvgyjkDvJYS3dODKC8Df51MIr82KKnUQGGnCNPpiK+W7Uii6SS/ml123P7sSdFI8asOxhoQM7QzHXGgehn+aAnPm6gAGT8HRYdjkBTyFOe4TEu9LnL70l9RUEAAtb51QBBb1Xyd98c8V1FCnmcAy3V9HAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqQ8v8b3Wih/RPp8/hiIj7cGKy6E2NEoVByQzZkGIMopaUAqwtdDEXu1WIjMrnE1s/3gphsafLhXLNUYs2rFR0fvEUJQaE50iL4nCaTuiPRoEZE6K0fJCK9tQodWxPJ96l8ZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYDCgAFAuCTBAAKAAkD6AMAAAAAAAANDwgABAEFAwYJAgcODA8LCxA5AAAAAAAAABXNWwcAAAAAAA==',
-    'perpCreate': 'AYc2M664xyp5KtJNEM6BwLktFZKGe8nHZ4sr/N1/Q2NiAUaFUk00hjRntepiLKBYx1aneG3lg5kcd4fmtDf5EguAAQAHEwjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3ACq38i/FXKURYzagZKXUyGrgrNZ6q/nBXkiMdu84t0MHQOxOoB68jlME8rOv28+UDmJSz+f7DikyctWgqP1Y3TjC/C3q86VBlW4wSUr7XUtB/VbcOA19QUe1+c44S4PrPxA0jLRKrGykGaiFbyQkTH7/GFTP04bkVakrmk+F/E5bHyE/llXdldlfk1B55aCwXR0f/kPT8z8MHKBkYbPdom0wsPbPyONS6Kb5g/unF3fCc+JgPx39v9Jq6aRfsGRbk5/Jhgq/aUniTG0SoCsqrE9//2Dg5X5I09gjcg4jvGXDUm2EFrsiKcuNUiOwORj3SQmLZBVa35MNvM3pHa9OoNKZbHA2WN1+L7JGlKrReqzppXUyIk+X4squbmtAaF7V70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0f+GSgRJbzaUOtcJS9pl8/Ro01jF1BPhKM/xbdDMCCvQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqVAKsLXQxF7tViIzK5xNbP94KYbGny4VyzVGLNqxUdH7jJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FnEUJQaE50iL4nCaTuiPRoEZE6K0fJCK9tQodWxPJ96l8ZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYDDQAFAoAaBgAQBgAKABIMDgEBDxUMBgUAAgcLCg8PDw8PCAMBEQQSDgkphgAAAAAAAADtRQAAAAAAABWuUQ0AAAAAAQABAQUBuAsAAAAAAAAAAwAA',
-    'perpCancel': 'AfcYFzzZqfqxjNcqkrowQV4K1tBVMNye8SD0SBzxL73UseqDd6x0cxmF0kFryb3BfnoQrXs9VUrQkIFHEsS+5QSAAQAEDAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3ACq38i/FXKURYzagZKXUyGrgrNZ6q/nBXkiMdu84t0MHQOxOoB68jlME8rOv28+UDmJSz+f7DikyctWgqP1Y3VsfIT+WVd2V2V+TUHnloLBdHR/+Q9PzPwwcoGRhs92ibTCw9s/I41LopvmD+6cXd8Jz4mA/Hf2/0mrppF+wZFuTn8mGCr9pSeJMbRKgKyqsT3//YODlfkjT2CNyDiO8ZfzdCiRX6NSmHQaJqt+luHP6FgW3N8oBK5dBFah7wURe/hkoESW82lDrXCUvaZfP0aNNYxdQT4SjP8W3QzAgr0ADBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAFAKsLXQxF7tViIzK5xNbP94KYbGny4VyzVGLNqxUdH7w1JthBa7IinLjVIjsDkY90kJi2QVWt+TDbzN6R2vTqDEUJQaE50iL4nCaTuiPRoEZE6K0fJCK9tQodWxPJ96l4Wsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAggABQKAGgYACQoEAwACBQcKAQsGEYcAAAAAAAAAFa5RDQAAAAAAAA==',
+    'spotCreate': 'AeQG8ha1P2QWAYMqY8FDJfHwiHNMXs8b2g1kyfkne8IK585jYNvJEvVV0CLIsFguTHBDNxQuN6tuj497i6xQmwyAAQAIEwjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3Cu+IiCyHL9TsAO8LaSegv5xcToPZ+mpLMMKDAtfD/BAerFct1WxVWud03Z35MMfSY8+rWlSE9TWEDsRs+MVpCjU4nkY/TZB1ZOUePtKm1zZFeUFCEuO1ndWAYs2x4kKcNl9P18wbYxTK0Ttr6YBo88WzPxSAWa6paHqJIPOe7Is5wvXd2bSFg3YwKqrw1VQem3cjRRI1Bs+toGsUJ1VzLjrMtoXvhOVc4qIh5vP+xzYd8Koobhy/Hazk8wUPBQcDqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwixhoQM7QzHXGgehn+aAnPm6gAGT8HRYdjkBTyFOe4TEuIyVp1UYzA9WH4ifFh5m5AsPlPep8muvZ6mgqfeFAx770ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALu33okwNZ/pDc81WvtG6d6cKb6nPUX7FC4ZkOiJOZdAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqQ8v8b3Wih/RPp8/hiIj7cGKy6E2NEoVByQzZkGIMopaNFAwFtLkaIGp+Tf9aOXhzy+jVDh1RutlbiFkwcQp+IGMlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WcZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYEDQAFAuCTBAANAAkD6AMAAAAAAAARBgAHAA8LDgEAEBYLAAkGARAQEBAQBwoIBQMMAg8SDg4EJTgAAAAAAAAA6EUAAAAAAAAVzVsHAAAAAAAB0AcAAAAAAAAAAAAA',
+    'spotMarketCreate': 'AVHS2BCjeylp2vth2ZCraQFJkVEnpjXt1U6Ui77RrEJN9UEtB8QdXie9wU+XQWp/jYooIyKiZeknuClFI5SbGQGAAQAIEwjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3Cu+IiCyHL9TsAO8LaSegv5xcToPZ+mpLMMKDAtfD/BAerFct1WxVWud03Z35MMfSY8+rWlSE9TWEDsRs+MVpCjU4nkY/TZB1ZOUePtKm1zZFeUFCEuO1ndWAYs2x4kKcNl9P18wbYxTK0Ttr6YBo88WzPxSAWa6paHqJIPOe7Is5wvXd2bSFg3YwKqrw1VQem3cjRRI1Bs+toGsUJ1VzLjrMtoXvhOVc4qIh5vP+xzYd8Koobhy/Hazk8wUPBQcDqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwixhoQM7QzHXGgehn+aAnPm6gAGT8HRYdjkBTyFOe4TEuIyVp1UYzA9WH4ifFh5m5AsPlPep8muvZ6mgqfeFAx770ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALu33okwNZ/pDc81WvtG6d6cKb6nPUX7FC4ZkOiJOZdAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqQ8v8b3Wih/RPp8/hiIj7cGKy6E2NEoVByQzZkGIMopaNFAwFtLkaIGp+Tf9aOXhzy+jVDh1RutlbiFkwcQp+IGMlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WcZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYEDQAFAuCTBAANAAkD6AMAAAAAAAARBgAHAA8LDgEAEBYLAAkGARAQEBAQBwoIBQMMAg8SDg4EJTgAAAAAAAAAZkkAAAAAAAAVj0cTAAAAAAAB0AcAAAAAAAAAAQAA',
+    'spotMarketCreateFromMid': 'ARwt/LfeClC1HVsD/5n2rIew5R/yUQl7RHXlYOtMRdixmWe/dkoD6l5e0V1mNQTFOA3kc2/aDDeGZXrGxjFEeAKAAQAHEgjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3Cu+IiCyHL9TsAO8LaSegv5xcToPZ+mpLMMKDAtfD/BAerFct1WxVWud03Z35MMfSY8+rWlSE9TWEDsRs+MVpCjU4nkY/TZB1ZOUePtKm1zZFeUFCEuO1ndWAYs2x4kKcNl9P18wbYxTK0Ttr6YBo88WzPxSAWa6paHqJIPOe7Is5wvXd2bSFg3YwKqrw1VQem3cjRRI1Bs+toGsUJ1VzLjrMtoXvhOVc4qIh5vP+xzYd8Koobhy/Hazk8wUPBQcDqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwixhoQM7QzHXGgehn+aAnPm6gAGT8HRYdjkBTyFOe4TEuIyVp1UYzA9WH4ifFh5m5AsPlPep8muvZ6mgqfeFAx770ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALu33okwNZ/pDc81WvtG6d6cKb6nPUX7FC4ZkOiJOZdBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkPL/G91oof0T6fP4YiI+3BisuhNjRKFQckM2ZBiDKKWjRQMBbS5GiBqfk3/Wjl4c8vo1Q4dUbrZW4hZMHEKfiBjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FnGTw5UytIRaGytEtMgQM1yHQnHteUuX6M0MSGAnYnigIWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAhAGAAoAEQsNAQAPFgsACQYBDw8PDw8HCggFAwwCDhENDQQlOAAAAAAAAABqQgAAAAAAABaPRxMAAAAAAQHQBwAAAAAAAAABAAA=',
+    'spotCreateMultiTickArrays': 'AcGWZPe/j3JbCPuI2nEvt88WXIJyxOpTqP7R62FlvN6j9VN5YWzzA+upCspSXye7izOx+Et/tb/7yHOAP91K+QqAAQAIFQjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3Cu+IiCyHL9TsAO8LaSegv5xcToPZ+mpLMMKDAtfD/BAOWR2LDDBqYKTBa3mUNm15d5inRalUDGeperc0MluPzR6sVy3VbFVa53Tdnfkwx9Jjz6taVIT1NYQOxGz4xWkKNTieRj9NkHVk5R4+0qbXNkV5QUIS47Wd1YBizbHiQpw5wvXd2bSFg3YwKqrw1VQem3cjRRI1Bs+toGsUJ1VzLjrMtoXvhOVc4qIh5vP+xzYd8Koobhy/Hazk8wUPBQcDTeuPs0v+LdMwdVMswV7eDvQmfZNkGO/Hb+Q1oasQ73CYBU6uaLNPfYbFPYYWMgxyoymODQlrjgW6w7/mRVb/Tams/qgHPfBFxCsBhNHwzvgyjkDvJYS3dODKC8Df51MIsYaEDO0Mx1xoHoZ/mgJz5uoABk/B0WHY5AU8hTnuExLiMladVGMwPVh+InxYeZuQLD5T3qfJrr2epoKn3hQMe+9LnL70l9RUEAAtb51QBBb1Xyd98c8V1FCnmcAy3V9HAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC7t96JMDWf6Q3PNVr7RunenCm+pz1F+xQuGZDoiTmXQMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAABt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkPL/G91oof0T6fP4YiI+3BisuhNjRKFQckM2ZBiDKKWjRQMBbS5GiBqfk3/Wjl4c8vo1Q4dUbrZW4hZMHEKfiBjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FnGTw5UytIRaGytEtMgQM1yHQnHteUuX6M0MSGAnYnigIWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWBA8ABQLgkwQADwAJA+gDAAAAAAAAEwYACQARDRABABIYDQALBgESEhISEgkMCgUEDgMRFBAQBwIIJTgAAAAAAAAA6EUAAAAAAAAVzVsHAAAAAAAB0AcAAAAAAAAAAAAA',
+    'spotCancel': 'AeupOig4kHOP9mHVwo2psL+QQRdvwiBVoYWPp/eHTFfjD7wTtGMJIaFw3KOPWuIYm0ZQGjMEuYulMpoxtIW0dACAAQAGEAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3Cu+IiCyHL9TsAO8LaSegv5xcToPZ+mpLMMKDAtfD/BA1OJ5GP02QdWTlHj7Sptc2RXlBQhLjtZ3VgGLNseJCnDnC9d3ZtIWDdjAqqvDVVB6bdyNFEjUGz62gaxQnVXMuOsy2he+E5VzioiHm8/7HNh3wqihuHL8drOTzBQ8FBwOYBU6uaLNPfYbFPYYWMgxyoymODQlrjgW6w7/mRVb/Tams/qgHPfBFxCsBhNHwzvgyjkDvJYS3dODKC8Df51MIsYaEDO0Mx1xoHoZ/mgJz5uoABk/B0WHY5AU8hTnuExLiMladVGMwPVh+InxYeZuQLD5T3qfJrr2epoKn3hQMe+9LnL70l9RUEAAtb51QBBb1Xyd98c8V1FCnmcAy3V9HAu7feiTA1n+kNzzVa+0bp3pwpvqc9RfsULhmQ6Ik5l0DBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpDy/xvdaKH9E+nz+GIiPtwYrLoTY0ShUHJDNmQYgyilo0UDAW0uRogan5N/1o5eHPL6NUOHVG62VuIWTBxCn4gcZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYDCwAFAuCTBAALAAkD6AMAAAAAAAAODwcACAQBBQYJAwIKDQ8MDBA5AAAAAAAAABXNWwcAAAAAAA==',
+    'perpCreate': 'ARnsVR2n+LXijYYXhSt81/HLX4JkQYz5wK2U/kQhqIpXol1grhSv6yjtYrIk6HT+/K2gQzUpjvNHhNEZYGonegyAAQAHEwjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3GcMdJO8FT20s4l7r3pC1jf3LAy7c0AAMzOxvvmAb3Cw6zLaF74TlXOKiIebz/sc2HfCqKG4cvx2s5PMFDwUHA1KcOX044OXbNGyoEaw3MdZzQMd/srSDkOyIj6Qf144JYTDT3Nxp/h8R8FNu4Thg4Vqqm9WSV0usrHpFc09uO+9hqedSu83egfVETEL5KC06Y5MYR6PL+XZ413S1nKsO020wsPbPyONS6Kb5g/unF3fCc+JgPx39v9Jq6aRfsGRb0UQ3hQfkoteJPDRgKVssWCVEdD4ZIBBZ5rUuA96d6KDSmWxwNljdfi+yRpSq0Xqs6aV1MiJPl+LKrm5rQGhe1d1kG59a8j5SyQv+uFsexwSKldRce0GfqYRGoJS0OHHs53FnLNFjTFE0RRKmNQk2cxjCgnR8h8YCQ3QuXRJHFE3vS5y+9JfUVBAALW+dUAQW9V8nffHPFdRQp5nAMt1fRwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAu7feiTA1n+kNzzVa+0bp3pwpvqc9RfsULhmQ6Ik5l0DBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpNFAwFtLkaIGp+Tf9aOXhzy+jVDh1RutlbiFkwcQp+IGMlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WcZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYDDgAFAoAaBgARBgALABIMDwEAEBUMBgoAAgkHCxAQEBAQBQEDDQQSDwgphgAAAAAAAADtRQAAAAAAABWuUQ0AAAAAAQABAQUBuAsAAAAAAAAAAwAA',
+    'perpCancel': 'AaLQl9kR4o5Wr15B8dh1ZYwB0hBdRRRjAWvQo/RwfJF8kHh2y+s+yo/Ygb7B758MfejTriMtZt3eomO/ZQWV2QyAAQAEDAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3Osy2he+E5VzioiHm8/7HNh3wqihuHL8drOTzBQ8FBwNSnDl9OODl2zRsqBGsNzHWc0DHf7K0g5DsiI+kH9eOCW0wsPbPyONS6Kb5g/unF3fCc+JgPx39v9Jq6aRfsGRbcN2tZbxCBtzm6Gaj97NC0XH4A8quWE+6HPKJ8neIDFrRRDeFB+Si14k8NGApWyxYJUR0PhkgEFnmtS4D3p3ooN1kG59a8j5SyQv+uFsexwSKldRce0GfqYRGoJS0OHHs53FnLNFjTFE0RRKmNQk2cxjCgnR8h8YCQ3QuXRJHFE0C7t96JMDWf6Q3PNVr7RunenCm+pz1F+xQuGZDoiTmXQMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAANFAwFtLkaIGp+Tf9aOXhzy+jVDh1RutlbiFkwcQp+IFhqedSu83egfVETEL5KC06Y5MYR6PL+XZ413S1nKsO04Wsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAgkABQKAGgYACgoDBwABBgULAggEEYcAAAAAAAAAFa5RDQAAAAAAAA==',
 };
-function createExchange() {
+function createExchange(spotSubAccountExists = true) {
     const exchange = new fibe({
         'walletAddress': walletAddress,
         'privateKey': testPrivateKey,
@@ -98,12 +98,24 @@ function createExchange() {
         });
         if (method === 'getAccountInfo') {
             const data = accountDataByPubkey[params[0]];
-            assert(data !== undefined);
+            if (data !== undefined) {
+                return {
+                    'value': {
+                        'owner': exchange.fibeProgramId(),
+                        'data': [data, 'base64'],
+                    },
+                };
+            }
+            if ((params[0] === expectedPdas['spotSubAccountState']) && spotSubAccountExists) {
+                return {
+                    'value': {
+                        'owner': exchange.fibeProgramId(),
+                        'data': ['', 'base64'],
+                    },
+                };
+            }
             return {
-                'value': {
-                    'owner': exchange.fibeProgramId(),
-                    'data': [data, 'base64'],
-                },
+                'value': null,
             };
         }
         if (method === 'getLatestBlockhash') {
@@ -262,7 +274,24 @@ async function testFibeLocalTx() {
         assert(exchange.fibeGetTickArrayPda('P', '1', '17901') === expectedPdas['perpTickArray']);
         const ata = exchange.solanaGetAssociatedTokenAddress(quoteMint, walletAddress, tokenProgram);
         const createAtaIx = exchange.solanaCreateAssociatedTokenAccountIx(walletAddress, ata, walletAddress, quoteMint, tokenProgram);
-        assert(createAtaIx['data'] === '01');
+        assert(createAtaIx['data'] === '00');
+        assert(exchange.fibeCalculateEncodedUserId(walletAddress) === '78b619e3f027eb9f');
+        assert(exchange.fibeGetDexConfigPda() === '4a99EpcVvdLwWMGEUH9ph28bzxGES3HsZJP8RV3xM2xE');
+        assert(exchange.fibeGetUserIdPda(walletAddress) === '8HHf5FXxhmTt6dVha41RXrZwUJUoSJZNvrBnEheKzWtA');
+        assert(exchange.fibeGetAccountLabelPda(walletAddress, 0) === 'HcESUNdjqVs3MACszxhSxm3D68AhaAQuFoK5tjLFE7xw');
+        const initUserIx = exchange.fibeInitUserIx(walletAddress, 0);
+        assert.deepStrictEqual(initUserIx['accounts'].map((account) => account['pubkey']), [
+            exchange.solanaSystemProgramId(),
+            exchange.fibeGetDexConfigPda(),
+            walletAddress,
+            exchange.fibeGetUserIdPda(walletAddress),
+            expectedPdas['userState'],
+            exchange.fibeGetAccountLabelPda(walletAddress, 0),
+            expectedPdas['spotSubAccountState'],
+            exchange.fibeProgramId(),
+            exchange.fibeProgramId(),
+        ]);
+        assert(initUserIx['data'] === '100000000000000078b619e3f027eb9f000000cde2c193eb2fd652d5ccceb8347e4b246df2f6cf412df506c3c51a14b997f7');
     }
     {
         const { exchange } = createExchange();
@@ -347,17 +376,17 @@ async function testFibeLocalTx() {
         const bidLiquidity = emptyTicks();
         bidLiquidity[0] = { 'unfilledLots': '2', 'sideBit': -1 };
         const askLiquidity = emptyTicks();
-        askLiquidity[99] = { 'unfilledLots': '2', 'sideBit': 1 };
+        askLiquidity[149] = { 'unfilledLots': '2', 'sideBit': 1 };
         assert.deepStrictEqual(exchange.fibeFindTickArrayIndexesForOrder([
-            { 'startTick': 17800, 'ticks': emptyTicks() },
-            { 'startTick': 17600, 'ticks': emptyTicks() },
+            { 'startTick': 17850, 'ticks': emptyTicks() },
+            { 'startTick': 17550, 'ticks': emptyTicks() },
             { 'startTick': 17700, 'ticks': bidLiquidity },
-        ], 17896, '2', 'B'), [17600, 17700]);
+        ], 17896, '2', 'B'), [17550, 17700]);
         assert.deepStrictEqual(exchange.fibeFindTickArrayIndexesForOrder([
-            { 'startTick': 18100, 'ticks': emptyTicks() },
-            { 'startTick': 17900, 'ticks': emptyTicks() },
+            { 'startTick': 18150, 'ticks': emptyTicks() },
+            { 'startTick': 17850, 'ticks': emptyTicks() },
             { 'startTick': 18000, 'ticks': askLiquidity },
-        ], 17896, '2', 'A'), [18000, 18100]);
+        ], 17896, '2', 'A'), [18000, 18150]);
     }
     {
         const { exchange } = createExchange();
@@ -514,6 +543,21 @@ async function testFibeLocalTx() {
         });
     }
     {
+        const { exchange, requests } = createExchange(false);
+        await exchange.createOrder('ETH/USDC', 'limit', 'buy', 0.00002, 1789.6, {
+            'rpcUrl': rpcUrl,
+            'orderId': '123456789',
+        });
+        const sendRequest = requests.filter((request) => request['method'] === 'sendTransaction')[0];
+        const instructions = transactionSemantics(exchange, sendRequest['params'][0]);
+        assert(instructions.length === 3);
+        assert(instructions[0]['programId'] === exchange.solanaAssociatedTokenProgramId());
+        assert(instructions[1]['programId'] === exchange.fibeProgramId());
+        assert(instructions[1]['dataHex'] === exchange.fibeInitUserIx(walletAddress, 0)['data']);
+        assert(instructions[1]['accounts'].length === 9);
+        assert(instructions[2]['dataHex'].slice(0, 16) === '3800000000000000');
+    }
+    {
         const { exchange, requests } = createExchange();
         const order = await exchange.createOrder('ETH/USDC', 'market', 'buy', 0.00002, 1789.6, {
             'rpcUrl': rpcUrl,
@@ -566,9 +610,9 @@ async function testFibeLocalTx() {
     {
         const { exchange, requests } = createExchange();
         const tickArrays = [
-            exchange.fibeGetTickArrayPda('S', '1', '17600'),
+            exchange.fibeGetTickArrayPda('S', '1', '17550'),
             exchange.fibeGetTickArrayPda('S', '1', '17700'),
-            exchange.fibeGetTickArrayPda('S', '1', '17800'),
+            exchange.fibeGetTickArrayPda('S', '1', '17850'),
         ];
         exchange.fibeGetTickArraysForOrder = async () => tickArrays;
         const order = await exchange.createOrder('ETH/USDC', 'limit', 'buy', 0.00002, 1789.6, {
