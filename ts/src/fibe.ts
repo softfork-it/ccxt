@@ -2781,6 +2781,48 @@ export default class fibe extends Exchange {
         };
     }
 
+    solanaSystemTransferIx (source, destination, lamports) {
+        return {
+            'programId': this.solanaSystemProgramId (),
+            'accounts': [
+                this.solanaAccount (source, true, true),
+                this.solanaAccount (destination, true),
+            ],
+            'data': this.solanaU32leHex (2) + this.solanaU64leHex (lamports),
+        };
+    }
+
+    solanaSyncNativeIx (account, tokenProgram) {
+        return {
+            'programId': tokenProgram,
+            'accounts': [ this.solanaAccount (account, true) ],
+            'data': this.solanaU8Hex (17),
+        };
+    }
+
+    async solanaWrapNativeIfNeeded (rpcUrl, owner, tokenProgram, amount, commitment = 'confirmed') {
+        const ata = this.solanaGetAssociatedTokenAddress (this.solanaNativeMint (), owner, tokenProgram);
+        const accountInfo = await this.solanaGetAccountInfo (rpcUrl, ata, commitment);
+        const instructions = [];
+        let balance = '0';
+        if (accountInfo === undefined) {
+            instructions.push (this.solanaCreateAssociatedTokenAccountIx (owner, ata, owner, this.solanaNativeMint (), tokenProgram));
+        } else {
+            const response = await this.solanaRpc (rpcUrl, 'getTokenAccountBalance', [
+                ata,
+                { 'commitment': commitment },
+            ]);
+            const value = this.safeDict (response, 'value', {});
+            balance = this.safeString (value, 'amount', '0');
+        }
+        if (this.fibeDecimalStringCompare (balance, amount) < 0) {
+            const required = this.fibeDecimalStringSubtract (amount, balance);
+            instructions.push (this.solanaSystemTransferIx (owner, ata, required));
+            instructions.push (this.solanaSyncNativeIx (ata, tokenProgram));
+        }
+        return instructions;
+    }
+
     solanaSetComputeUnitLimitIx (units) {
         return {
             'programId': this.solanaComputeBudgetProgramId (),
@@ -3114,8 +3156,8 @@ export default class fibe extends Exchange {
     async fibeLocalTxCreateOrder (params): Promise<Dict> {
         const market = this.fibeTxParseMarket (params['market']);
         const mt = this.safeString (market, 'mt');
-        if ((mt === 'S') && ((market['baseMint'] === this.solanaNativeMint ()) || (market['quoteMint'] === this.solanaNativeMint ()))) {
-            throw new ExchangeError (this.id + ' local Fibe transaction construction does not support native SOL wrapping');
+        if ((mt === 'S') && (market['quoteMint'] === this.solanaNativeMint ()) && (this.safeString (params, 'side') === 'B')) {
+            throw new ExchangeError (this.id + ' local Fibe transaction construction does not support buying with native SOL quote');
         }
         const mi = this.safeString (market, 'mi');
         let marginMode = this.safeString (params, 'marginMode', 'cross');
@@ -3146,6 +3188,12 @@ export default class fibe extends Exchange {
             const tokenProgramBase = await this.solanaGetTokenProgram (rpcUrl, this.safeString (market, 'baseMint'), this.safeString (market, 'tokenProgramBase'), commitment);
             const ownerBaseTokenAccount = this.solanaGetAssociatedTokenAddress (this.safeString (market, 'baseMint'), owner, tokenProgramBase);
             const ownerQuoteTokenAccount = this.solanaGetAssociatedTokenAddress (this.safeString (market, 'quoteMint'), owner, tokenProgramQuote);
+            if ((this.safeString (market, 'baseMint') === this.solanaNativeMint ()) && (this.safeString (params, 'side') === 'A')) {
+                const wrapIxs = await this.solanaWrapNativeIfNeeded (rpcUrl, owner, tokenProgramBase, sizeInBase, commitment);
+                for (let i = 0; i < wrapIxs.length; i++) {
+                    ixs.push (wrapIxs[i]);
+                }
+            }
             let ataToCreate = ownerQuoteTokenAccount;
             let ataMint = this.safeString (market, 'quoteMint');
             let ataTokenProgram = tokenProgramQuote;
@@ -3228,9 +3276,6 @@ export default class fibe extends Exchange {
     async fibeLocalTxCancelOrder (params): Promise<Dict> {
         const market = this.fibeTxParseMarket (params['market']);
         const mt = this.safeString (market, 'mt');
-        if ((mt === 'S') && ((market['baseMint'] === this.solanaNativeMint ()) || (market['quoteMint'] === this.solanaNativeMint ()))) {
-            throw new ExchangeError (this.id + ' local Fibe transaction construction does not support native SOL wrapping');
-        }
         const mi = this.safeString (market, 'mi');
         const owner = this.safeString (params, 'user');
         const privateKeyHex = this.solanaParsePrivateKeyHex (this.safeString (params, 'privateKey'), owner);
