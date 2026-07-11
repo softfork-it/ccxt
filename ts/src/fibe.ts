@@ -1630,7 +1630,7 @@ export default class fibe extends Exchange {
     }
 
     fibeIsUnsignedIntegerString (value) {
-        if (value == undefined) {
+        if ((value === undefined) || (value === null)) {
             return false;
         }
         const stringValue = this.numberToString (value);
@@ -1757,7 +1757,7 @@ export default class fibe extends Exchange {
         const whole = this.fibeDecimalStringStripZeros (this.safeString (parts, 0, '0'));
         const fraction = this.safeString (parts, 1, '');
         const division = this.fibeDecimalStringDivmod (whole, divisor);
-        let quotient = this.safeString (division, 'quotient');
+        const quotient = this.safeString (division, 'quotient');
         const remainder = this.safeInteger (division, 'remainder', 0);
         if (!roundUp) {
             return quotient;
