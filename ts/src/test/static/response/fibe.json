@@ -1,0 +1,618 @@
+{
+    "exchange": "fibe",
+    "walletAddress": "wallet",
+    "skipKeys": [],
+    "methods": {
+        "fetchMarkets": [
+            {
+                "description": "fetchMarkets spot and perp",
+                "method": "fetchMarkets",
+                "input": [],
+                "httpResponse": [
+                    {
+                        "marketPubkey": "DSUHYq53qiGfRYB6ZvFrM2vRde9LzNpfTzMLEuDvMMyn",
+                        "mi": "1",
+                        "baseMint": "So11111111111111111111111111111111111111112",
+                        "baseDecimals": 9,
+                        "quoteMint": "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov",
+                        "quoteDecimals": 6,
+                        "sizeDecimals": 4,
+                        "priceDecimals": 2,
+                        "symbol": "SOL/USDC",
+                        "tickSizeInQuoteBaseUnits": 10000,
+                        "lotSizeInBaseBaseUnits": 100000,
+                        "mt": "S"
+                    },
+                    {
+                        "marketPubkey": "Fd7JthK8tqBXNxxKGjEArtp19NdA3g32xAV2RPWxperr",
+                        "mi": "1",
+                        "baseMint": "So11111111111111111111111111111111111111112",
+                        "baseDecimals": 9,
+                        "quoteMint": "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov",
+                        "quoteDecimals": 6,
+                        "sizeDecimals": 4,
+                        "priceDecimals": 2,
+                        "symbol": "SOL-USDC",
+                        "tickSizeInQuoteBaseUnits": 10000,
+                        "lotSizeInBaseBaseUnits": 100000,
+                        "maxLeverage": 100,
+                        "mt": "P"
+                    }
+                ],
+                "parsedResponse": [
+                    {
+                        "id": "spot:1",
+                        "lowercaseId": null,
+                        "symbol": "SOL/USDC",
+                        "base": "SOL",
+                        "quote": "USDC",
+                        "settle": null,
+                        "baseId": "So11111111111111111111111111111111111111112",
+                        "quoteId": "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov",
+                        "settleId": null,
+                        "type": "spot",
+                        "spot": true,
+                        "margin": false,
+                        "swap": false,
+                        "future": false,
+                        "option": false,
+                        "index": false,
+                        "active": true,
+                        "contract": false,
+                        "linear": null,
+                        "inverse": null,
+                        "subType": null,
+                        "taker": 0,
+                        "maker": 0,
+                        "contractSize": null,
+                        "expiry": null,
+                        "expiryDatetime": null,
+                        "strike": null,
+                        "optionType": null,
+                        "precision": {
+                            "amount": 0.0001,
+                            "price": 0.01
+                        },
+                        "limits": {
+                            "leverage": {
+                                "min": null,
+                                "max": null
+                            },
+                            "amount": {
+                                "min": 0.0001,
+                                "max": null
+                            },
+                            "price": {
+                                "min": 0.01,
+                                "max": null
+                            },
+                            "cost": {
+                                "min": null,
+                                "max": null
+                            }
+                        },
+                        "marginModes": {
+                            "cross": null,
+                            "isolated": null
+                        },
+                        "created": null,
+                        "info": {
+                            "marketPubkey": "DSUHYq53qiGfRYB6ZvFrM2vRde9LzNpfTzMLEuDvMMyn",
+                            "mi": "1",
+                            "baseMint": "So11111111111111111111111111111111111111112",
+                            "baseDecimals": 9,
+                            "quoteMint": "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov",
+                            "quoteDecimals": 6,
+                            "sizeDecimals": 4,
+                            "priceDecimals": 2,
+                            "symbol": "SOL/USDC",
+                            "tickSizeInQuoteBaseUnits": 10000,
+                            "lotSizeInBaseBaseUnits": 100000,
+                            "mt": "S"
+                        },
+                        "percentage": null,
+                        "tierBased": null
+                    },
+                    {
+                        "id": "perp:1",
+                        "lowercaseId": null,
+                        "symbol": "SOL/USDC:USDC",
+                        "base": "SOL",
+                        "quote": "USDC",
+                        "settle": "USDC",
+                        "baseId": "So11111111111111111111111111111111111111112",
+                        "quoteId": "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov",
+                        "settleId": "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov",
+                        "type": "swap",
+                        "spot": false,
+                        "margin": false,
+                        "swap": true,
+                        "future": false,
+                        "option": false,
+                        "index": null,
+                        "active": true,
+                        "contract": true,
+                        "linear": true,
+                        "inverse": false,
+                        "subType": null,
+                        "taker": 0,
+                        "maker": 0,
+                        "contractSize": 1,
+                        "expiry": null,
+                        "expiryDatetime": null,
+                        "strike": null,
+                        "optionType": null,
+                        "precision": {
+                            "amount": 0.0001,
+                            "price": 0.01
+                        },
+                        "limits": {
+                            "leverage": {
+                                "min": null,
+                                "max": null
+                            },
+                            "amount": {
+                                "min": 0.0001,
+                                "max": null
+                            },
+                            "price": {
+                                "min": 0.01,
+                                "max": null
+                            },
+                            "cost": {
+                                "min": null,
+                                "max": null
+                            }
+                        },
+                        "marginModes": {
+                            "cross": null,
+                            "isolated": null
+                        },
+                        "created": null,
+                        "info": {
+                            "marketPubkey": "Fd7JthK8tqBXNxxKGjEArtp19NdA3g32xAV2RPWxperr",
+                            "mi": "1",
+                            "baseMint": "So11111111111111111111111111111111111111112",
+                            "baseDecimals": 9,
+                            "quoteMint": "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov",
+                            "quoteDecimals": 6,
+                            "sizeDecimals": 4,
+                            "priceDecimals": 2,
+                            "symbol": "SOL-USDC",
+                            "tickSizeInQuoteBaseUnits": 10000,
+                            "lotSizeInBaseBaseUnits": 100000,
+                            "maxLeverage": 100,
+                            "mt": "P"
+                        },
+                        "percentage": null,
+                        "tierBased": null
+                    }
+                ]
+            }
+        ],
+        "fetchTicker": [
+            {
+                "description": "fetchTicker spot",
+                "method": "fetchTicker",
+                "input": [
+                    "SOL/USDC"
+                ],
+                "httpResponse": {
+                    "midPx": "80",
+                    "bidPx": "79",
+                    "bidSz": "2",
+                    "askPx": "81",
+                    "askSz": "3",
+                    "midPx24hAgo": "100",
+                    "bv24h": "10",
+                    "qv24h": "800"
+                },
+                "parsedResponse": {
+                    "symbol": "SOL/USDC",
+                    "timestamp": null,
+                    "datetime": null,
+                    "high": null,
+                    "low": null,
+                    "bid": 79,
+                    "bidVolume": 2,
+                    "ask": 81,
+                    "askVolume": 3,
+                    "vwap": 80,
+                    "open": 100,
+                    "close": 80,
+                    "last": 80,
+                    "previousClose": null,
+                    "change": -20,
+                    "percentage": -20,
+                    "average": 90,
+                    "baseVolume": 10,
+                    "quoteVolume": 800,
+                    "info": {
+                        "midPx": "80",
+                        "bidPx": "79",
+                        "bidSz": "2",
+                        "askPx": "81",
+                        "askSz": "3",
+                        "midPx24hAgo": "100",
+                        "bv24h": "10",
+                        "qv24h": "800"
+                    },
+                    "indexPrice": null,
+                    "markPrice": null
+                }
+            }
+        ],
+        "fetchFundingRate": [
+            {
+                "description": "fetchFundingRate perp",
+                "method": "fetchFundingRate",
+                "input": [
+                    "SOL/USDC:USDC"
+                ],
+                "httpResponse": {
+                    "midPx": "80",
+                    "bidPx": "79",
+                    "bidSz": "2",
+                    "askPx": "81",
+                    "askSz": "3",
+                    "midPx24hAgo": "100",
+                    "bv24h": "10",
+                    "qv24h": "800",
+                    "markPx": "80",
+                    "oraclePx": "81",
+                    "funding": "0.0001",
+                    "premium": "0.0002",
+                    "openInterest": "20"
+                },
+                "parsedResponse": {
+                    "info": {
+                        "midPx": "80",
+                        "bidPx": "79",
+                        "bidSz": "2",
+                        "askPx": "81",
+                        "askSz": "3",
+                        "midPx24hAgo": "100",
+                        "bv24h": "10",
+                        "qv24h": "800",
+                        "markPx": "80",
+                        "oraclePx": "81",
+                        "funding": "0.0001",
+                        "premium": "0.0002",
+                        "openInterest": "20"
+                    },
+                    "symbol": "SOL/USDC:USDC",
+                    "markPrice": 80,
+                    "indexPrice": 81,
+                    "interestRate": null,
+                    "estimatedSettlePrice": null,
+                    "timestamp": null,
+                    "datetime": null,
+                    "fundingRate": 0.0001,
+                    "fundingTimestamp": null,
+                    "fundingDatetime": null,
+                    "nextFundingRate": null,
+                    "nextFundingTimestamp": null,
+                    "nextFundingDatetime": null,
+                    "previousFundingRate": null,
+                    "previousFundingTimestamp": null,
+                    "previousFundingDatetime": null,
+                    "interval": "1h"
+                }
+            }
+        ],
+        "fetchTrades": [
+            {
+                "description": "fetchTrades spot",
+                "method": "fetchTrades",
+                "input": [
+                    "SOL/USDC",
+                    1783763617000,
+                    2
+                ],
+                "httpResponse": [
+                    {
+                        "mi": "1",
+                        "mt": "S",
+                        "px": "80",
+                        "side": "A",
+                        "sz": "0.25",
+                        "oid": "100",
+                        "time": 1783763617,
+                        "txId": "trade-a"
+                    },
+                    {
+                        "mi": "1",
+                        "mt": "S",
+                        "px": "82",
+                        "side": "B",
+                        "sz": "0.5",
+                        "oid": "101",
+                        "time": 1783763618,
+                        "txId": "trade-b"
+                    }
+                ],
+                "parsedResponse": [
+                    {
+                        "info": {
+                            "mi": "1",
+                            "mt": "S",
+                            "px": "80",
+                            "side": "A",
+                            "sz": "0.25",
+                            "oid": "100",
+                            "time": 1783763617,
+                            "txId": "trade-a"
+                        },
+                        "id": null,
+                        "timestamp": 1783763617000,
+                        "datetime": "2026-07-11T09:53:37.000Z",
+                        "symbol": "SOL/USDC",
+                        "order": "100",
+                        "type": null,
+                        "side": "sell",
+                        "takerOrMaker": null,
+                        "price": 80,
+                        "amount": 0.25,
+                        "cost": 20,
+                        "fee": {
+                            "cost": null,
+                            "currency": null
+                        },
+                        "fees": []
+                    },
+                    {
+                        "info": {
+                            "mi": "1",
+                            "mt": "S",
+                            "px": "82",
+                            "side": "B",
+                            "sz": "0.5",
+                            "oid": "101",
+                            "time": 1783763618,
+                            "txId": "trade-b"
+                        },
+                        "id": null,
+                        "timestamp": 1783763618000,
+                        "datetime": "2026-07-11T09:53:38.000Z",
+                        "symbol": "SOL/USDC",
+                        "order": "101",
+                        "type": null,
+                        "side": "buy",
+                        "takerOrMaker": null,
+                        "price": 82,
+                        "amount": 0.5,
+                        "cost": 41,
+                        "fee": {
+                            "cost": null,
+                            "currency": null
+                        },
+                        "fees": []
+                    }
+                ]
+            }
+        ],
+        "fetchOHLCV": [
+            {
+                "description": "fetchOHLCV spot",
+                "method": "fetchOHLCV",
+                "input": [
+                    "SOL/USDC",
+                    "1m",
+                    1783526220000,
+                    2
+                ],
+                "httpResponse": [
+                    {
+                        "mi": "1",
+                        "mt": "S",
+                        "t": 1783526220,
+                        "T": 1783526279,
+                        "o": "75",
+                        "c": "80",
+                        "l": "70",
+                        "h": "85",
+                        "bv": "10",
+                        "qv": "800",
+                        "n": 7
+                    },
+                    {
+                        "mi": "1",
+                        "mt": "S",
+                        "t": 1783526280,
+                        "T": 1783526339,
+                        "o": "80",
+                        "c": "82",
+                        "l": "79",
+                        "h": "83",
+                        "bv": "20",
+                        "qv": "1620",
+                        "n": 17
+                    }
+                ],
+                "parsedResponse": [
+                    [
+                        1783526220000,
+                        75,
+                        85,
+                        70,
+                        80,
+                        10
+                    ],
+                    [
+                        1783526280000,
+                        80,
+                        83,
+                        79,
+                        82,
+                        20
+                    ]
+                ]
+            }
+        ],
+        "fetchPositions": [
+            {
+                "description": "fetchPositions perp",
+                "method": "fetchPositions",
+                "input": [
+                    [
+                        "SOL/USDC:USDC"
+                    ],
+                    {
+                        "user": "wallet"
+                    }
+                ],
+                "httpResponse": {
+                    "user": "wallet",
+                    "states": [
+                        {
+                            "user": "wallet",
+                            "subAccountIndex": 2,
+                            "quoteMint": "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov",
+                            "clearinghouseState": {
+                                "assetPositions": [
+                                    {
+                                        "mi": "1",
+                                        "entryPx": "75",
+                                        "leverage": {
+                                            "type": "cross",
+                                            "value": 5
+                                        },
+                                        "liquidationPx": "60",
+                                        "markPx": "80",
+                                        "marginUsed": "16",
+                                        "maintenanceMargin": "4",
+                                        "positionValue": "80",
+                                        "returnOnEquity": "0.1",
+                                        "szi": "1",
+                                        "unrealizedPnl": "5"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "parsedResponse": [
+                    {
+                        "info": {
+                            "user": "wallet",
+                            "subAccountIndex": 2,
+                            "quoteMint": "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov",
+                            "mi": "1",
+                            "entryPx": "75",
+                            "leverage": {
+                                "type": "cross",
+                                "value": 5
+                            },
+                            "liquidationPx": "60",
+                            "markPx": "80",
+                            "marginUsed": "16",
+                            "maintenanceMargin": "4",
+                            "positionValue": "80",
+                            "returnOnEquity": "0.1",
+                            "szi": "1",
+                            "unrealizedPnl": "5"
+                        },
+                        "id": null,
+                        "symbol": "SOL/USDC:USDC",
+                        "timestamp": null,
+                        "datetime": null,
+                        "contracts": 1,
+                        "contractSize": 1,
+                        "side": "long",
+                        "notional": 80,
+                        "leverage": 5,
+                        "unrealizedPnl": 5,
+                        "realizedPnl": null,
+                        "collateral": 16,
+                        "entryPrice": 75,
+                        "markPrice": 80,
+                        "liquidationPrice": 60,
+                        "marginMode": "cross",
+                        "hedged": null,
+                        "maintenanceMargin": 4,
+                        "maintenanceMarginPercentage": null,
+                        "initialMargin": 16,
+                        "initialMarginPercentage": null,
+                        "marginRatio": null,
+                        "lastUpdateTimestamp": null,
+                        "lastPrice": null,
+                        "stopLossPrice": null,
+                        "takeProfitPrice": null,
+                        "percentage": 10
+                    }
+                ]
+            }
+        ],
+        "fetchOrder": [
+            {
+                "description": "fetchOrder spot",
+                "method": "fetchOrder",
+                "input": [
+                    "42",
+                    "SOL/USDC",
+                    {
+                        "user": "wallet"
+                    }
+                ],
+                "httpResponse": {
+                    "mi": "1",
+                    "mt": "S",
+                    "oid": "42",
+                    "type": "L",
+                    "timeInForce": "ALO",
+                    "px": "80",
+                    "side": "B",
+                    "origSz": "0.5",
+                    "sz": "0.2",
+                    "status": "O",
+                    "txId": "order-tx",
+                    "createdAt": 1783763617,
+                    "updatedAt": 1783763618
+                },
+                "parsedResponse": {
+                    "info": {
+                        "mi": "1",
+                        "mt": "S",
+                        "oid": "42",
+                        "type": "L",
+                        "timeInForce": "ALO",
+                        "px": "80",
+                        "side": "B",
+                        "origSz": "0.5",
+                        "sz": "0.2",
+                        "status": "O",
+                        "txId": "order-tx",
+                        "createdAt": 1783763617,
+                        "updatedAt": 1783763618
+                    },
+                    "id": "42",
+                    "clientOrderId": null,
+                    "timestamp": 1783763617000,
+                    "datetime": "2026-07-11T09:53:37.000Z",
+                    "lastTradeTimestamp": null,
+                    "lastUpdateTimestamp": 1783763618000,
+                    "symbol": "SOL/USDC",
+                    "type": "limit",
+                    "timeInForce": "PO",
+                    "postOnly": true,
+                    "reduceOnly": null,
+                    "side": "buy",
+                    "price": 80,
+                    "triggerPrice": null,
+                    "amount": 0.5,
+                    "cost": 24,
+                    "average": null,
+                    "filled": 0.3,
+                    "remaining": 0.2,
+                    "status": "open",
+                    "fee": null,
+                    "trades": [],
+                    "fees": [],
+                    "stopPrice": null,
+                    "takeProfitPrice": null,
+                    "stopLossPrice": null
+                }
+            }
+        ]
+    }
+}
