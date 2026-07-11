@@ -23,6 +23,7 @@ export default class fibe extends Exchange {
             'id': 'fibe',
             'name': 'Fibe',
             'countries': [ ],
+            'certified': false,
             // 500ms (conservative) until fibone_rate_limit weights are confirmed
             'rateLimit': 500,
             'version': 'v1',
@@ -80,12 +81,12 @@ export default class fibe extends Exchange {
                 '1M': '1M',
             },
             'urls': {
-                'logo': '',
+                'logo': 'https://avatars.githubusercontent.com/u/222646239?v=4',
                 'api': {
                     'rest': 'https://fb-4b8448ac.alephium.org/api/v1',
                 },
                 'www': 'https://fibe.exchange',
-                'doc': 'https://fibe.exchange/docs',
+                'doc': 'https://fb-4b8448ac.alephium.org/swagger-ui/',
             },
             'api': {
                 'public': {
