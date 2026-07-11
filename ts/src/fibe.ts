@@ -2,7 +2,7 @@
 //  ---------------------------------------------------------------------------
 
 import Exchange from './abstract/fibe.js';
-import { ArgumentsRequired, AuthenticationError, ExchangeError, InvalidOrder } from './base/errors.js';
+import { ArgumentsRequired, AuthenticationError, ExchangeError, InvalidOrder, OrderNotFound } from './base/errors.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { eddsa } from './base/functions/crypto.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
@@ -35,15 +35,21 @@ export default class fibe extends Exchange {
                 'future': false,
                 'option': false,
                 'cancelOrder': true,
+                'cancelAllOrders': true,
+                'cancelOrders': true,
                 'createOrder': true,
                 'fetchBalance': true,
+                'fetchCanceledOrders': true,
+                'fetchClosedOrders': true,
                 'fetchCurrencies': false,
                 'fetchFundingHistory': true,
                 'fetchFundingRate': true,
                 'fetchFundingRates': true,
                 'fetchMarkets': true,
+                'fetchMyTrades': true,
                 'fetchOHLCV': true,
                 'fetchOpenOrders': true,
+                'fetchOrder': true,
                 'fetchOrderBook': true,
                 'fetchOrders': true,
                 'fetchPositions': true,
@@ -93,6 +99,7 @@ export default class fibe extends Exchange {
                         'l2book': 1,
                         'recent-market-trades': 1,
                         'candles': 1,
+                        'order': 1,
                         'open-orders': 1,
                         'historical-orders': 1,
                         'spot-state': 1,
@@ -100,6 +107,7 @@ export default class fibe extends Exchange {
                         'all-clearinghouse-state': 1,
                         'user-fees': 1,
                         'user-funding-history': 1,
+                        'user-trades': 1,
                     },
                 },
             },
@@ -802,6 +810,55 @@ export default class fibe extends Exchange {
         return this.parseTrades (response, market, since, limit);
     }
 
+    async fetchMyTrades (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
+        /**
+         * @method
+         * @name fibe#fetchMyTrades
+         * @description fetch all trades made by the user
+         * @see https://fb-4b8448ac.alephium.org/api/v1/user-trades
+         * @param {string} [symbol] unified market symbol
+         * @param {int} [since] timestamp in ms of the earliest trade to fetch
+         * @param {int} [limit] the maximum amount of trades to fetch
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {int} [params.until] timestamp in ms of the latest trade to fetch
+         * @returns {Trade[]} a list of [trade structures]{@link https://docs.ccxt.com/#/?id=trade-structure}
+         */
+        let userAddress = undefined;
+        [ userAddress, params ] = this.handlePublicAddress ('fetchMyTrades', params);
+        await this.loadMarkets ();
+        let market = undefined;
+        const request: Dict = {
+            'user': userAddress,
+        };
+        if (symbol !== undefined) {
+            market = this.market (symbol);
+            const info = market['info'];
+            request['mi'] = this.safeString (info, 'mi');
+            request['mt'] = this.safeString (info, 'mt', 'S');
+        }
+        if (since !== undefined) {
+            request['startTime'] = this.parseToInt (since / 1000);
+        }
+        let until: Int = undefined;
+        [ until, params ] = this.handleOptionAndParams (params, 'fetchMyTrades', 'until');
+        if (until !== undefined) {
+            request['endTime'] = this.parseToInt (Math.ceil (until / 1000));
+        }
+        if (limit !== undefined) {
+            request['limit'] = limit;
+        }
+        const response = await this.publicGetUserTrades (this.extend (request, params));
+        let trades = this.parseTrades (response, market, since, undefined);
+        if (until !== undefined) {
+            trades = trades.filter ((trade) => {
+                const timestamp = this.safeInteger (trade, 'timestamp');
+                return (timestamp !== undefined) && (timestamp <= until);
+            });
+        }
+        return this.filterBySinceLimit (trades, since, limit) as Trade[];
+    }
+
     parseTrade (trade: Dict, market: Market = undefined): Trade {
         //
         //     {
@@ -815,18 +872,30 @@ export default class fibe extends Exchange {
         //         "txId": "3QNbQR27r5fgxbFLAX4nMuvMvV6KRHQcPHYFrzoh3RdKzUcBejatrJBfpf1FYyQzGcVhee1DqgEaGzCngMxXaoRq"
         //     }
         //
+        const mi = this.safeString (trade, 'mi');
+        const mt = this.safeString (trade, 'mt');
+        let marketId = undefined;
+        if (mi !== undefined) {
+            let idPrefix = 'spot:';
+            if (mt === 'P') {
+                idPrefix = 'perp:';
+            }
+            marketId = idPrefix + mi;
+        }
+        market = this.safeMarket (marketId, market);
         const timestamp = this.safeTimestamp (trade, 'time');
         const side = this.parseSide (this.safeString (trade, 'side'));
+        const takerOrMaker = this.safeString (trade, 'takerOrMaker');
         return this.safeTrade ({
             'info': trade,
             'id': undefined,
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
-            'symbol': this.safeSymbol (undefined, market),
+            'symbol': market['symbol'],
             'order': this.safeString (trade, 'oid'),
             'type': undefined,
             'side': side,
-            'takerOrMaker': undefined,
+            'takerOrMaker': takerOrMaker,
             'price': this.safeString (trade, 'px'),
             'amount': this.safeString (trade, 'sz'),
             'cost': undefined,
@@ -910,6 +979,42 @@ export default class fibe extends Exchange {
         ];
     }
 
+    async fetchOrder (id: string, symbol: Str = undefined, params = {}): Promise<Order> {
+        /**
+         * @method
+         * @name fibe#fetchOrder
+         * @description fetches information on an order made by the user
+         * @see https://fb-4b8448ac.alephium.org/api/v1/order
+         * @param {string} id order id
+         * @param {string} symbol unified market symbol of the order
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {int} [params.subAccountIndex] perp subaccount index, defaults to 0
+         * @returns {Order} an [order structure]{@link https://docs.ccxt.com/#/?id=order-structure}
+         */
+        if (symbol === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchOrder() requires a symbol');
+        }
+        id = this.fibeValidateUnsignedIntegerParam ('fetchOrder', 'id', id);
+        let userAddress = undefined;
+        [ userAddress, params ] = this.handlePublicAddress ('fetchOrder', params);
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        let subAccountIndex = undefined;
+        [ subAccountIndex, params ] = this.handleOptionAndParams (params, 'fetchOrder', 'subAccountIndex', 0);
+        subAccountIndex = this.fibeValidateU8Param ('fetchOrder', 'subAccountIndex', subAccountIndex);
+        const info = market['info'];
+        const request: Dict = {
+            'user': userAddress,
+            'orderId': id,
+            'mi': this.safeString (info, 'mi'),
+            'mt': this.safeString (info, 'mt', 'S'),
+            'subAccountIndex': subAccountIndex,
+        };
+        const response = await this.publicGetOrder (this.extend (request, params));
+        return this.parseOrder (response, market);
+    }
+
     async fetchOpenOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
         /**
          * @method
@@ -948,8 +1053,9 @@ export default class fibe extends Exchange {
          * @param {int} [limit] the maximum number of order structures to retrieve
          * @param {object} [params] extra parameters specific to the exchange API endpoint
          * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {string} [params.status] raw status filter, "F" for closed/filled orders or "C" for canceled orders
          * @param {int} [params.page] page number, default is 1
-         * @param {int} [params.pageSize] page size, default is limit when provided
+         * @param {int} [params.pageSize] page size, defaults to limit when provided without a symbol
          * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
          */
         let userAddress = undefined;
@@ -962,7 +1068,8 @@ export default class fibe extends Exchange {
         let page = undefined;
         [ page, params ] = this.handleOptionAndParams (params, 'fetchOrders', 'page');
         let pageSize = undefined;
-        [ pageSize, params ] = this.handleOptionAndParams (params, 'fetchOrders', 'pageSize', limit);
+        const defaultPageSize = (symbol === undefined) ? limit : undefined;
+        [ pageSize, params ] = this.handleOptionAndParams (params, 'fetchOrders', 'pageSize', defaultPageSize);
         const request: Dict = {
             'user': userAddress,
         };
@@ -974,6 +1081,44 @@ export default class fibe extends Exchange {
         }
         const response = await this.publicGetHistoricalOrders (this.extend (request, params));
         return this.parseOrders (response, market, since, limit);
+    }
+
+    async fetchClosedOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
+        /**
+         * @method
+         * @name fibe#fetchClosedOrders
+         * @description fetch all closed orders
+         * @see https://fb-4b8448ac.alephium.org/api/v1/historical-orders
+         * @param {string} symbol unified market symbol
+         * @param {int} [since] the earliest time in ms to fetch closed orders for
+         * @param {int} [limit] the maximum number of closed order structures to retrieve
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {int} [params.page] page number, default is 1
+         * @param {int} [params.pageSize] page size
+         * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
+         */
+        params = this.extend (params, { 'status': 'F' });
+        return await this.fetchOrders (symbol, since, limit, params);
+    }
+
+    async fetchCanceledOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
+        /**
+         * @method
+         * @name fibe#fetchCanceledOrders
+         * @description fetch all canceled orders
+         * @see https://fb-4b8448ac.alephium.org/api/v1/historical-orders
+         * @param {string} symbol unified market symbol
+         * @param {int} [since] the earliest time in ms to fetch canceled orders for
+         * @param {int} [limit] the maximum number of canceled order structures to retrieve
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @param {int} [params.page] page number, default is 1
+         * @param {int} [params.pageSize] page size
+         * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
+         */
+        params = this.extend (params, { 'status': 'C' });
+        return await this.fetchOrders (symbol, since, limit, params);
     }
 
     async fetchCreateOrderMarketReferencePrice (market: Market): Promise<string> {
@@ -1304,6 +1449,57 @@ export default class fibe extends Exchange {
             'fee': undefined,
             'trades': undefined,
         }, market);
+    }
+
+    async cancelOrders (ids: string[], symbol: Str = undefined, params = {}): Promise<Order[]> {
+        /**
+         * @method
+         * @name fibe#cancelOrders
+         * @description cancels multiple normal-user resting orders by submitting one local Solana cancellation transaction per id
+         * @param {string[]} ids order ids
+         * @param {string} symbol unified market symbol
+         * @param {object} [params] extra parameters specific to the exchange API endpoint, same as cancelOrder()
+         * @returns {Order[]} a list of order structures
+         */
+        if (symbol === undefined) {
+            throw new ArgumentsRequired (this.id + ' cancelOrders() requires a symbol for local tx construction');
+        }
+        const orders: Order[] = [];
+        for (let i = 0; i < ids.length; i++) {
+            const order = await this.cancelOrder (ids[i], symbol, this.extend ({}, params));
+            orders.push (order);
+        }
+        return orders;
+    }
+
+    async cancelAllOrders (symbol: Str = undefined, params = {}): Promise<Order[]> {
+        /**
+         * @method
+         * @name fibe#cancelAllOrders
+         * @description cancels all normal-user open orders for one market by fetching open orders, then submitting one local Solana cancellation transaction per order
+         * @param {string} symbol unified market symbol
+         * @param {object} [params] extra parameters specific to the exchange API endpoint, same as cancelOrder()
+         * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+         * @returns {Order[]} a list of order structures
+         */
+        if (symbol === undefined) {
+            throw new ArgumentsRequired (this.id + ' cancelAllOrders() requires a symbol for local tx construction');
+        }
+        const fetchOpenOrdersParams: Dict = {};
+        const user = this.safeString2 (params, 'user', 'address');
+        if (user !== undefined) {
+            fetchOpenOrdersParams['user'] = user;
+        }
+        const openOrders = await this.fetchOpenOrders (symbol, undefined, undefined, fetchOpenOrdersParams);
+        const ids: string[] = [];
+        for (let i = 0; i < openOrders.length; i++) {
+            const id = this.safeString (openOrders[i], 'id');
+            if (id === undefined) {
+                throw new ExchangeError (this.id + ' cancelAllOrders() cannot cancel an open order without an id');
+            }
+            ids.push (id);
+        }
+        return await this.cancelOrders (ids, symbol, params);
     }
 
     parseOrder (order: Dict, market: Market = undefined): Order {
@@ -3323,6 +3519,10 @@ export default class fibe extends Exchange {
     handleErrors (code: int, reason: string, url: string, method: string, headers: Dict, body: string, response, requestHeaders, requestBody) {
         if (response === undefined) {
             return undefined;
+        }
+        const error = this.safeString (response, 'error');
+        if ((code === 404) && (error !== undefined)) {
+            throw new OrderNotFound (this.id + ' ' + error);
         }
         // map Fibe error bodies to ccxt exceptions here
         return undefined;
