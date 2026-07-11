@@ -130,112 +130,45 @@ function readShortVec (bytes, cursor) {
     }
 }
 
-function readU8 (bytes, cursor) {
-    const value = bytes[cursor.offset];
-    cursor.offset += 1;
-    return value;
-}
-
-function readBytes (bytes, cursor, length) {
-    const value = bytes.subarray (cursor.offset, cursor.offset + length);
-    cursor.offset += length;
-    return value;
-}
-
-function decodePubkey (exchange, bytes) {
-    return exchange.binaryToBase58 (bytes);
-}
-
-function parseTransaction (exchange, transaction) {
+function normalizeTransaction (transaction) {
     const bytes = Buffer.from (transaction, 'base64');
     const cursor = { offset: 0 };
     const signatureCount = readShortVec (bytes, cursor);
+    assert.ok (signatureCount > 0, 'transaction should include signature slots');
+    const signatureOffset = cursor.offset;
     const signatures = [];
     for (let i = 0; i < signatureCount; i++) {
-        signatures.push (readBytes (bytes, cursor, 64).toString ('hex'));
+        signatures.push (bytes.subarray (cursor.offset, cursor.offset + 64).toString ('hex'));
+        cursor.offset += 64;
     }
-    const version = readU8 (bytes, cursor);
+    const version = bytes[cursor.offset];
+    cursor.offset += 1;
     assert.equal (version, 0x80, 'expected a v0 Solana transaction message');
-    const requiredSignatures = readU8 (bytes, cursor);
-    const readonlySigners = readU8 (bytes, cursor);
-    const readonlyUnsigned = readU8 (bytes, cursor);
+    cursor.offset += 3; // message header
     const accountCount = readShortVec (bytes, cursor);
-    const accountKeys = [];
-    for (let i = 0; i < accountCount; i++) {
-        accountKeys.push (decodePubkey (exchange, readBytes (bytes, cursor, 32)));
-    }
-    const recentBlockhash = decodePubkey (exchange, readBytes (bytes, cursor, 32));
-    const instructionCount = readShortVec (bytes, cursor);
-    const instructions = [];
-    for (let i = 0; i < instructionCount; i++) {
-        const programIndex = readU8 (bytes, cursor);
-        const accountIndexCount = readShortVec (bytes, cursor);
-        const accountIndexes = [];
-        for (let j = 0; j < accountIndexCount; j++) {
-            accountIndexes.push (readU8 (bytes, cursor));
-        }
-        const dataLength = readShortVec (bytes, cursor);
-        instructions.push ({
-            programIndex,
-            accountIndexes,
-            dataHex: readBytes (bytes, cursor, dataLength).toString ('hex'),
-        });
-    }
-    const lookupCount = readShortVec (bytes, cursor);
-    const addressTableLookups = [];
-    for (let i = 0; i < lookupCount; i++) {
-        const accountKey = decodePubkey (exchange, readBytes (bytes, cursor, 32));
-        const writableCount = readShortVec (bytes, cursor);
-        const writableIndexes = [];
-        for (let j = 0; j < writableCount; j++) {
-            writableIndexes.push (readU8 (bytes, cursor));
-        }
-        const readonlyCount = readShortVec (bytes, cursor);
-        const readonlyIndexes = [];
-        for (let j = 0; j < readonlyCount; j++) {
-            readonlyIndexes.push (readU8 (bytes, cursor));
-        }
-        addressTableLookups.push ({
-            accountKey,
-            writableIndexes,
-            readonlyIndexes,
-        });
-    }
-    assert.equal (cursor.offset, bytes.length, 'unexpected trailing transaction bytes');
+    cursor.offset += accountCount * 32;
+    const blockhashOffset = cursor.offset;
+    assert.ok ((blockhashOffset + 32) <= bytes.length, 'transaction is missing a recent blockhash');
+    bytes.fill (0, signatureOffset, signatureOffset + (signatureCount * 64));
+    bytes.fill (0, blockhashOffset, blockhashOffset + 32);
     return {
-        signatureCount,
         signatures,
-        recentBlockhash,
-        requiredSigners: accountKeys.slice (0, requiredSignatures),
-        comparable: {
-            requiredSignatures,
-            readonlySigners,
-            readonlyUnsigned,
-            accountKeys,
-            instructions,
-            addressTableLookups,
-        },
+        bytes,
+        accountCount,
     };
 }
 
-function assertUnsignedTransaction (parsed, name) {
-    assert.ok (parsed.signatures.length > 0, `${name} should include signature slots`);
-    for (const signature of parsed.signatures) {
-        assert.equal (signature, '00'.repeat (64), `${name} should have zeroed unsigned signatures`);
-    }
-}
-
-function assertSignedTransaction (parsed, name) {
-    assert.ok (parsed.signatures.some ((signature) => signature !== '00'.repeat (64)), `${name} should be signed`);
-}
-
-function comparableSummary (parsed) {
+function assertTransactionsMatch (localTransaction, fiboneTransaction, name) {
+    const local = normalizeTransaction (localTransaction);
+    const fibone = normalizeTransaction (fiboneTransaction);
+    assert.ok (local.signatures.some ((signature) => signature !== '00'.repeat (64)), `${name} local transaction should be signed`);
+    assert.ok (fibone.signatures.every ((signature) => signature === '00'.repeat (64)), `${name} Fibone transaction should be unsigned`);
+    assert.equal (local.accountCount, fibone.accountCount, `${name} account count differs from Fibone`);
+    assert.equal (local.bytes.length, fibone.bytes.length, `${name} transaction length differs from Fibone`);
+    assert.deepEqual (local.bytes, fibone.bytes, `${name} must match Fibone except signatures and recent blockhash`);
     return {
-        requiredSigners: parsed.requiredSigners,
-        accountCount: parsed.comparable.accountKeys.length,
-        instructionCount: parsed.comparable.instructions.length,
-        lookupCount: parsed.comparable.addressTableLookups.length,
-        recentBlockhash: parsed.recentBlockhash,
+        accountCount: local.accountCount,
+        transactionBytes: local.bytes.length,
     };
 }
 
@@ -324,22 +257,6 @@ function chooseAmount (market) {
     return market.limits?.amount?.min ?? 0.00001;
 }
 
-function scenarioComputeUnitLimit (scenario) {
-    const configured = numberEnv ('FIBE_COMPUTE_UNIT_LIMIT');
-    if (configured !== undefined) {
-        return configured;
-    }
-    return scenario.computeUnitLimit;
-}
-
-function scenarioComputeUnitPrice (scenario) {
-    const configured = numberEnv ('FIBE_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS');
-    if (configured !== undefined) {
-        return configured;
-    }
-    return scenario.computeUnitPriceMicroLamports;
-}
-
 function createOrderScenarios (spotSymbol, perpSymbol) {
     const slippage = numberEnv ('FIBE_SLIPPAGE', 0.05);
     const subAccountIndex = numberEnv ('FIBE_SUB_ACCOUNT_INDEX', 0);
@@ -422,8 +339,8 @@ async function assertCreateOrderMatchesFibone (exchange, fiboneUrl, scenario) {
     const marginMode = scenario.marginMode ?? env ('FIBE_MARGIN_MODE', 'cross');
     const initialLeverage = scenario.initialLeverage;
     const autoTopUpCollateralFromWallet = scenario.autoTopUpCollateralFromWallet ?? boolEnv ('FIBE_AUTO_TOP_UP_COLLATERAL', true);
-    const computeUnitLimit = scenarioComputeUnitLimit (scenario);
-    const computeUnitPriceMicroLamports = scenarioComputeUnitPrice (scenario);
+    const computeUnitLimit = numberEnv ('FIBE_COMPUTE_UNIT_LIMIT', scenario.computeUnitLimit);
+    const computeUnitPriceMicroLamports = numberEnv ('FIBE_COMPUTE_UNIT_PRICE_MICRO_LAMPORTS', scenario.computeUnitPriceMicroLamports);
     const localParams = compact ({
         rpcUrl: exchange.options.rpcUrl,
         orderId,
@@ -464,30 +381,11 @@ async function assertCreateOrderMatchesFibone (exchange, fiboneUrl, scenario) {
     const built = await postJson (`${fiboneUrl}/build-create-order-tx`, request);
     assert.equal (built.encoding, 'base64');
     assert.equal (built.orderId, orderId);
-    const localParsed = parseTransaction (exchange, localTransaction);
-    const fiboneParsed = parseTransaction (exchange, built.transaction);
-    assertSignedTransaction (localParsed, `${symbol} local createOrder`);
-    assertUnsignedTransaction (fiboneParsed, `${symbol} Fibone build-create-order-tx`);
-    assert.deepEqual (fiboneParsed.requiredSigners, built.requiredSigners, `${symbol} Fibone requiredSigners`);
-    assert.deepEqual (
-        localParsed.comparable,
-        fiboneParsed.comparable,
-        `${scenario.name} local transaction must match Fibone-built unsigned transaction except signatures and recent blockhash`,
-    );
+    const comparison = assertTransactionsMatch (localTransaction, built.transaction, scenario.name);
     console.log (`ok ${scenario.name}`, {
         request,
-        local: comparableSummary (localParsed),
-        fibone: comparableSummary (fiboneParsed),
+        comparison,
     });
-    return {
-        orderId,
-        symbol,
-        side,
-        amount,
-        price,
-        localParams,
-        request,
-    };
 }
 
 function configuredCancelOrderId (market) {
@@ -547,20 +445,10 @@ async function assertCancelOrderMatchesFibone (exchange, fiboneUrl, symbol, opti
     const built = await postJson (`${fiboneUrl}/build-cancel-order-tx`, request);
     assert.equal (built.encoding, 'base64');
     assert.equal (built.orderId, cancelInput.orderId);
-    const localParsed = parseTransaction (exchange, localTransaction);
-    const fiboneParsed = parseTransaction (exchange, built.transaction);
-    assertSignedTransaction (localParsed, `${cancelInput.symbol} local cancelOrder`);
-    assertUnsignedTransaction (fiboneParsed, `${cancelInput.symbol} Fibone build-cancel-order-tx`);
-    assert.deepEqual (fiboneParsed.requiredSigners, built.requiredSigners, `${cancelInput.symbol} Fibone requiredSigners`);
-    assert.deepEqual (
-        localParsed.comparable,
-        fiboneParsed.comparable,
-        `${cancelInput.symbol} cancelOrder local transaction must match Fibone-built unsigned transaction except signatures and recent blockhash`,
-    );
+    const comparison = assertTransactionsMatch (localTransaction, built.transaction, `cancelOrder ${cancelInput.symbol}`);
     console.log (`ok cancelOrder ${cancelInput.symbol}`, {
         request,
-        local: comparableSummary (localParsed),
-        fibone: comparableSummary (fiboneParsed),
+        comparison,
     });
     return cancelInput;
 }
