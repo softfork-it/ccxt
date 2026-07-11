@@ -384,8 +384,6 @@ export default class Exchange {
     setProperty(obj: any, property: any, defaultValue?: any): void;
     exceptionMessage(exc: any, includeStack?: boolean): string;
     axolotl(payload: any, hexKey: any, ed25519: any): string;
-    eddsaPublicKey(secret: any, ed25519: any): Uint8Array;
-    eddsaPointIsValid(point: any, ed25519: any): boolean;
     fixStringifiedJsonMembers(content: string): string;
     ethAbiEncode(types: any, args: any): Uint8Array;
     ethEncodeStructuredData(domain: any, messageTypes: any, messageData: any): Uint8Array;
