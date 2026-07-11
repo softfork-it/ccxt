@@ -378,6 +378,28 @@ func Eddsa(data2 any, secret any, curve any) string {
 	return base64Str
 }
 
+func EddsaPublicKey(secret any, curve any) []uint8 {
+	var seed []uint8
+	if value, ok := secret.([]uint8); ok {
+		seed = value
+	} else {
+		bytes, err := interfacesToBytes(secret.([]any))
+		if err != nil {
+			panic(err)
+		}
+		seed = bytes
+	}
+	if len(seed) != ed25.SeedSize {
+		panic("Ed25519 secret must be 32 bytes")
+	}
+	privateKey := ed25.NewKeyFromSeed(seed)
+	return privateKey[ed25.SeedSize:]
+}
+
+func (this *Exchange) EddsaPublicKey(secret any, curve any) any {
+	return EddsaPublicKey(secret, curve)
+}
+
 // func Ecdsa(request any, secret any, alg any, hash any) string {
 // 	return "" // to do
 // }

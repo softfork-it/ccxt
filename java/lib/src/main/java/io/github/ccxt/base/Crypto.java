@@ -592,6 +592,15 @@ public final class Crypto {
         }
     }
 
+    public static Object EddsaPublicKey(Object secret, Object alg) {
+        if (!(secret instanceof byte[] seed) || seed.length != 32) {
+            throw new IllegalArgumentException("Ed25519 secret must be 32 bytes");
+        }
+        return new org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters(seed, 0)
+            .generatePublicKey()
+            .getEncoded();
+    }
+
     /**
      * Extract the 32-byte Ed25519 seed from various secret formats:
      * - byte[] of exactly 32 bytes: used directly

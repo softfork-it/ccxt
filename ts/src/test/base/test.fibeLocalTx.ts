@@ -11,6 +11,32 @@ const rpcUrl = 'https://api.devnet.solana.com';
 const tokenProgram = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const spotTickArray = '4fFJyphLe6tPCzEiVBxESwYSRBumJ4W76srcYs6Tj5Cn';
 const perpTickArray = 'FB6JhTAfMddLKqPhiUjcpfnmbfMJXTMST81CxmUTtMqn';
+// Encoded once with the TS SDK codecs; do not regenerate these with CCXT helpers.
+const spotOpenOrdersAccount = 'IwAAAAAAAAABAAAAAAAAAAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3AAABAAAAAAAAAAAAAQAAAAEAAAAAAAAACM3iwZPrL9ZS1czOuDR+SyRt8vbPQS31BsPFGhS5l/cVzVsHAAAAAAAAAAAAAAAA6EUAAAAAAAAAAAAAAAEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
+const perpOpenOrdersAccount = 'RAAAAAAAAAABAAAAAAAAAAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3AgABAAAAAAAAAAAAAQAAAAEAAAAAAAAACM3iwZPrL9ZS1czOuDR+SyRt8vbPQS31BsPFGhS5l/cVrlENAAAAAAAAAAAAAAAA7UUAAAAAAAAAAAIDBQH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+
+const expectedPdas = {
+    'userState': 'VKGncjFHa1T9yerW2f3nAsa3eT4ntr3G2VSoren9nma',
+    'spotSubAccountState': '8dPLmk7dRxj8QXyKCQiLSB9g1CivTEFa5nxEQCoJHCeM',
+    'perpSubAccountState': '78hdemZkp7UJJ5Er2ssMzy3gxaUMqjuFYBZosLKkanVX',
+    'spotOpenOrders': 'BRjLYpTBjbuHN35TNSZ2s1GzueXqK1ir8RFhaY6FbVAZ',
+    'perpOpenOrders': 'J6tocuh7YnJog8J11772FBL7PHJHJ1rnVqnjTcSvczTq',
+    'perpMarginAccount': 'AwGFPtHXWkWhLqDkGjhCCSMJ33VskHAN4hMc1pMvK1cQ',
+    'spotTickArray': '8QLaRGWEV3dSB28unyLsYwYnPyun1un1wx3mZAdu4bLU',
+    'perpTickArray': 'J25EFKMK5acu218nhzdwAPihXHb4UuydqWFJRhBguHQR',
+};
+
+// Expected by solana_pubkey::bytes_are_curve_point; hash vectors use SHA-256("fibe-curve-vector-N").
+const curvePointVectors = [
+    { 'name': 'Ed25519 basepoint', 'hex': '5866666666666666666666666666666666666666666666666666666666666666', 'onCurve': true },
+    { 'name': 'identity', 'hex': '01' + '00'.repeat (31), 'onCurve': true },
+    { 'name': 'negative-zero identity', 'hex': '01' + '00'.repeat (30) + '80', 'onCurve': true },
+    { 'name': 'non-canonical field element p', 'hex': 'ed' + 'ff'.repeat (30) + '7f', 'onCurve': true },
+    { 'name': 'hash 0', 'hex': 'dc1a9fa1f50923c39ba07cac584f39edadac97f4c2f9da07f361be6d63f9c79a', 'onCurve': false },
+    { 'name': 'hash 1', 'hex': 'f6c94dcd7ed588518da78b58ead7dafbe2b2835e7af84f47a4eefb24b705f102', 'onCurve': false },
+    { 'name': 'hash 5', 'hex': '544e9e41211a6c230b638598b26fdb7874bd5390ee16c59d0b304f61f37256e3', 'onCurve': true },
+    { 'name': 'hash 13', 'hex': '9347d96440a488e810b172703a565ce7f4445b7a07dee886188dd030e06b4683', 'onCurve': true },
+];
 
 const rawMarkets = [
     {
@@ -44,12 +70,12 @@ const rawMarkets = [
 ];
 
 const expectedTransactions = {
-    'spotCreate': 'Abtnvr9Kg3O1mgonvFzWmwVNNXamaHBxIIUXGDVca3d1xxpsDcYS/t+EnmDOetdM56uSh2hZ7joJjXCQFRbfgQSAAQAHEgjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaDZfT9fMG2MUytE7a+mAaPPFsz8UgFmuqWh6iSDznuyLUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xxU/qBGmjFB1l6tYrWAlHWtlEwYZSPJcs6W0W4geQ5kprqreiXLNCDHyQRKsNy0iHMqGaDh51FX6vLjR5IV8aqqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwivzYoqdRAYacI0+mIr5btSKLpJL+aXXbc/uxJ0Ujxqw7GGhAztDMdcaB6Gf5oCc+bqAAZPwdFh2OQFPIU57hMS70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAABt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkPL/G91oof0T6fP4YiI+3BisuhNjRKFQckM2ZBiDKKWlAKsLXQxF7tViIzK5xNbP94KYbGny4VyzVGLNqxUdH7xFCUGhOdIi+Jwmk7oj0aBGROitHyQivbUKHVsTyfepfGTw5UytIRaGytEtMgQM1yHQnHteUuX6M0MSGAnYnigIWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAwwABQLgkwQADAAJA+gDAAAAAAAADxYLAAUBBg8PDw8PBwoJBAgQAg4RDQ0DJTgAAAAAAAAA6EUAAAAAAAAVzVsHAAAAAAAB0AcAAAAAAAAAAAAA',
-    'spotMarketCreate': 'AZBNLMEo1PYS90rETKAw2io8hlfkavLblH4MFBX0r+0SkPEKNvloPNSox26m06sJIzO9chu6PrpFZRmqQn2KuQOAAQAHEgjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaDZfT9fMG2MUytE7a+mAaPPFsz8UgFmuqWh6iSDznuyLUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xxU/qBGmjFB1l6tYrWAlHWtlEwYZSPJcs6W0W4geQ5kprqreiXLNCDHyQRKsNy0iHMqGaDh51FX6vLjR5IV8aqqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwivzYoqdRAYacI0+mIr5btSKLpJL+aXXbc/uxJ0Ujxqw7GGhAztDMdcaB6Gf5oCc+bqAAZPwdFh2OQFPIU57hMS70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAABt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkPL/G91oof0T6fP4YiI+3BisuhNjRKFQckM2ZBiDKKWlAKsLXQxF7tViIzK5xNbP94KYbGny4VyzVGLNqxUdH7xFCUGhOdIi+Jwmk7oj0aBGROitHyQivbUKHVsTyfepfGTw5UytIRaGytEtMgQM1yHQnHteUuX6M0MSGAnYnigIWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAwwABQLgkwQADAAJA+gDAAAAAAAADxYLAAUBBg8PDw8PBwoJBAgQAg4RDQ0DJTgAAAAAAAAAZkkAAAAAAAAVj0cTAAAAAAAB0AcAAAAAAAAAAQAA',
-    'spotMarketCreateFromMid': 'AdtQZetDkp3Dmqbw3OiYb2wuedYOwEbvYhlYVAw6o4ntDNl55SCnkwsm4QwIvrti7n3PgSJXiUL+9H+HtyZ6nQ+AAQAGEQjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaDZfT9fMG2MUytE7a+mAaPPFsz8UgFmuqWh6iSDznuyLUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xxU/qBGmjFB1l6tYrWAlHWtlEwYZSPJcs6W0W4geQ5kprqreiXLNCDHyQRKsNy0iHMqGaDh51FX6vLjR5IV8aqqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwivzYoqdRAYacI0+mIr5btSKLpJL+aXXbc/uxJ0Ujxqw7GGhAztDMdcaB6Gf5oCc+bqAAZPwdFh2OQFPIU57hMS70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpDy/xvdaKH9E+nz+GIiPtwYrLoTY0ShUHJDNmQYgyilpQCrC10MRe7VYiMyucTWz/eCmGxp8uFcs1RizasVHR+8RQlBoTnSIvicJpO6I9GgRkTorR8kIr21Ch1bE8n3qXxk8OVMrSEWhsrRLTIEDNch0Jx7XlLl+jNDEhgJ2J4oCFrMno+TNerQK9he3Jl7WFeYc5ugQDnxs/2l/GZbSUFgEOFgsABQEGDg4ODg4HCgkECA8CDRAMDAMlOAAAAAAAAABqQgAAAAAAABaPRxMAAAAAAQHQBwAAAAAAAAABAAA=',
-    'spotCreateMultiTickArrays': 'AWBfTK1rI4It+O9ijO7pWgR16zbNnzLwwv1j1G2z45yH1LwGrS6jlQa9pVQbf1WX2BZ/5b9rT/4yAQ3P9+MaVQ+AAQAHFAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaEMIq0QieMdOTL/9LxEgZlMWLwyaBikTCvjemcxoDRGyUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xt/E1MlA8yZ91OePWqP66Qq0mQRLWNlWddb0JKW5R3qXFT+oEaaMUHWXq1itYCUda2UTBhlI8lyzpbRbiB5DmSmuqt6Jcs0IMfJBEqw3LSIcyoZoOHnUVfq8uNHkhXxqqldetLNrFvVb5LwMBq2oCY7/sOX56OeRc8c74kM+RNtams/qgHPfBFxCsBhNHwzvgyjkDvJYS3dODKC8Df51MIr82KKnUQGGnCNPpiK+W7Uii6SS/ml123P7sSdFI8asOxhoQM7QzHXGgehn+aAnPm6gAGT8HRYdjkBTyFOe4TEu9LnL70l9RUEAAtb51QBBb1Xyd98c8V1FCnmcAy3V9HAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpDy/xvdaKH9E+nz+GIiPtwYrLoTY0ShUHJDNmQYgyilpQCrC10MRe7VYiMyucTWz/eCmGxp8uFcs1RizasVHR+8RQlBoTnSIvicJpO6I9GgRkTorR8kIr21Ch1bE8n3qXxk8OVMrSEWhsrRLTIEDNch0Jx7XlLl+jNDEhgJ2J4oCFrMno+TNerQK9he3Jl7WFeYc5ugQDnxs/2l/GZbSUFgMOAAUC4JMEAA4ACQPoAwAAAAAAABEYDQAGAQcREREREQkMCwQKEgIQEw8PCAMFJTgAAAAAAAAA6EUAAAAAAAAVzVsHAAAAAAAB0AcAAAAAAAAAAAAA',
+    'spotCreate': 'AUEJKTqUpk7/jLl3Xg7mZe7aLN3mJcKi+sPCqOTY4tvVIVfQ4wdqKL6goyKalFUu9zrHEi9uzBrmEgVvtbB1Xg6AAQAIEwjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaDZfT9fMG2MUytE7a+mAaPPFsz8UgFmuqWh6iSDznuyLUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xxU/qBGmjFB1l6tYrWAlHWtlEwYZSPJcs6W0W4geQ5kprqreiXLNCDHyQRKsNy0iHMqGaDh51FX6vLjR5IV8aqqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwivzYoqdRAYacI0+mIr5btSKLpJL+aXXbc/uxJ0Ujxqw7GGhAztDMdcaB6Gf5oCc+bqAAZPwdFh2OQFPIU57hMS70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAABt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkPL/G91oof0T6fP4YiI+3BisuhNjRKFQckM2ZBiDKKWlAKsLXQxF7tViIzK5xNbP94KYbGny4VyzVGLNqxUdH7jJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FnEUJQaE50iL4nCaTuiPRoEZE6K0fJCK9tQodWxPJ96l8ZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYEDAAFAuCTBAAMAAkD6AMAAAAAAAAQBgAHAA4LDQEBDxYLAAUBBg8PDw8PBwoJBAgRAg4SDQ0DJTgAAAAAAAAA6EUAAAAAAAAVzVsHAAAAAAAB0AcAAAAAAAAAAAAA',
+    'spotMarketCreate': 'ARdWlwmeJvy5Nnq4NuEacyCkj0uqdmY9sA023kclayG+48im5VzMof6kzJnPLf1fPp0joKhQ/EK9t0evjUBiVQKAAQAIEwjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaDZfT9fMG2MUytE7a+mAaPPFsz8UgFmuqWh6iSDznuyLUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xxU/qBGmjFB1l6tYrWAlHWtlEwYZSPJcs6W0W4geQ5kprqreiXLNCDHyQRKsNy0iHMqGaDh51FX6vLjR5IV8aqqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwivzYoqdRAYacI0+mIr5btSKLpJL+aXXbc/uxJ0Ujxqw7GGhAztDMdcaB6Gf5oCc+bqAAZPwdFh2OQFPIU57hMS70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAABt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkPL/G91oof0T6fP4YiI+3BisuhNjRKFQckM2ZBiDKKWlAKsLXQxF7tViIzK5xNbP94KYbGny4VyzVGLNqxUdH7jJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FnEUJQaE50iL4nCaTuiPRoEZE6K0fJCK9tQodWxPJ96l8ZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYEDAAFAuCTBAAMAAkD6AMAAAAAAAAQBgAHAA4LDQEBDxYLAAUBBg8PDw8PBwoJBAgRAg4SDQ0DJTgAAAAAAAAAZkkAAAAAAAAVj0cTAAAAAAAB0AcAAAAAAAAAAQAA',
+    'spotMarketCreateFromMid': 'AayabVU58ywneXBzmQaycgFHM7S7RLEDKccLHPh78QORzPlHKW+hGn5hjLMUdWoYzLaZIngelJml17Y469mIWQ2AAQAHEgjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaDZfT9fMG2MUytE7a+mAaPPFsz8UgFmuqWh6iSDznuyLUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xxU/qBGmjFB1l6tYrWAlHWtlEwYZSPJcs6W0W4geQ5kprqreiXLNCDHyQRKsNy0iHMqGaDh51FX6vLjR5IV8aqqaz+qAc98EXEKwGE0fDO+DKOQO8lhLd04MoLwN/nUwivzYoqdRAYacI0+mIr5btSKLpJL+aXXbc/uxJ0Ujxqw7GGhAztDMdcaB6Gf5oCc+bqAAZPwdFh2OQFPIU57hMS70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpDy/xvdaKH9E+nz+GIiPtwYrLoTY0ShUHJDNmQYgyilpQCrC10MRe7VYiMyucTWz/eCmGxp8uFcs1RizasVHR+4yXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZxFCUGhOdIi+Jwmk7oj0aBGROitHyQivbUKHVsTyfepfGTw5UytIRaGytEtMgQM1yHQnHteUuX6M0MSGAnYnigIWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAg8GAAoAEQsMAQEOFgsABQEGDg4ODg4HCgkECBACDREMDAMlOAAAAAAAAABqQgAAAAAAABaPRxMAAAAAAQHQBwAAAAAAAAABAAA=',
+    'spotCreateMultiTickArrays': 'AaReInA9OmF/8Efz4Qp6q2LoVG4oO2pamHivexlrGPNCO5V5/ANtJCT86+NAFdSYd8/VvDGEGNTBDMtu6YNRBwqAAQAIFQjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN0W9ezFUsVn2RWj4HZlY+IzqK6Ma6+2myr9tc1qChEQaEMIq0QieMdOTL/9LxEgZlMWLwyaBikTCvjemcxoDRGyUuLuvdW69n8+tjMtLcf6Ygs11vOEKQjekwMGoucMz2xt/E1MlA8yZ91OePWqP66Qq0mQRLWNlWddb0JKW5R3qXFT+oEaaMUHWXq1itYCUda2UTBhlI8lyzpbRbiB5DmSmuqt6Jcs0IMfJBEqw3LSIcyoZoOHnUVfq8uNHkhXxqqldetLNrFvVb5LwMBq2oCY7/sOX56OeRc8c74kM+RNtams/qgHPfBFxCsBhNHwzvgyjkDvJYS3dODKC8Df51MIr82KKnUQGGnCNPpiK+W7Uii6SS/ml123P7sSdFI8asOxhoQM7QzHXGgehn+aAnPm6gAGT8HRYdjkBTyFOe4TEu9LnL70l9RUEAAtb51QBBb1Xyd98c8V1FCnmcAy3V9HAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpDy/xvdaKH9E+nz+GIiPtwYrLoTY0ShUHJDNmQYgyilpQCrC10MRe7VYiMyucTWz/eCmGxp8uFcs1RizasVHR+4yXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZxFCUGhOdIi+Jwmk7oj0aBGROitHyQivbUKHVsTyfepfGTw5UytIRaGytEtMgQM1yHQnHteUuX6M0MSGAnYnigIWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWBA4ABQLgkwQADgAJA+gDAAAAAAAAEgYACQAQDQ8BAREYDQAGAQcREREREQkMCwQKEwIQFA8PCAMFJTgAAAAAAAAA6EUAAAAAAAAVzVsHAAAAAAAB0AcAAAAAAAAAAAAA',
     'spotCancel': 'AbX/LvA5oSfJVwHc9pCtkFS2/NMq9jn8Vrgh99gwNNnpv2qT8/0WtA1HAd5Y7vEfQa2zyA0IEy10etiboYiHSACAAQAGEAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3B0DsTqAevI5TBPKzr9vPlA5iUs/n+w4pMnLVoKj9WN1S4u691br2fz62My0tx/piCzXW84QpCN6TAwai5wzPbG38TUyUDzJn3U549ao/rpCrSZBEtY2VZ11vQkpblHepcVP6gRpoxQdZerWK1gJR1rZRMGGUjyXLOltFuIHkOZKa6q3olyzQgx8kESrDctIhzKhmg4edRV+ry40eSFfGqqms/qgHPfBFxCsBhNHwzvgyjkDvJYS3dODKC8Df51MIr82KKnUQGGnCNPpiK+W7Uii6SS/ml123P7sSdFI8asOxhoQM7QzHXGgehn+aAnPm6gAGT8HRYdjkBTyFOe4TEu9LnL70l9RUEAAtb51QBBb1Xyd98c8V1FCnmcAy3V9HAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqQ8v8b3Wih/RPp8/hiIj7cGKy6E2NEoVByQzZkGIMopaUAqwtdDEXu1WIjMrnE1s/3gphsafLhXLNUYs2rFR0fvEUJQaE50iL4nCaTuiPRoEZE6K0fJCK9tQodWxPJ96l8ZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYDCgAFAuCTBAAKAAkD6AMAAAAAAAANDwgABAEFAwYJAgcODA8LCxA5AAAAAAAAABXNWwcAAAAAAA==',
-    'perpCreate': 'AfMEz3jmyW4CI7oeff76t3DMrDRngvCprVuqEajx38MWEVLQ1qKW13EHWQd79aDa/1xvMxviR8Hd+AAr4N93XweAAQAGEgjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3ACq38i/FXKURYzagZKXUyGrgrNZ6q/nBXkiMdu84t0MHQOxOoB68jlME8rOv28+UDmJSz+f7DikyctWgqP1Y3TjC/C3q86VBlW4wSUr7XUtB/VbcOA19QUe1+c44S4PrPxA0jLRKrGykGaiFbyQkTH7/GFTP04bkVakrmk+F/E5bHyE/llXdldlfk1B55aCwXR0f/kPT8z8MHKBkYbPdom0wsPbPyONS6Kb5g/unF3fCc+JgPx39v9Jq6aRfsGRbk5/Jhgq/aUniTG0SoCsqrE9//2Dg5X5I09gjcg4jvGXDUm2EFrsiKcuNUiOwORj3SQmLZBVa35MNvM3pHa9OoNKZbHA2WN1+L7JGlKrReqzppXUyIk+X4squbmtAaF7V70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0f+GSgRJbzaUOtcJS9pl8/Ro01jF1BPhKM/xbdDMCCvQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqVAKsLXQxF7tViIzK5xNbP94KYbGny4VyzVGLNqxUdH7xFCUGhOdIi+Jwmk7oj0aBGROitHyQivbUKHVsTyfepfGTw5UytIRaGytEtMgQM1yHQnHteUuX6M0MSGAnYnigIWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAg0ABQKAGgYADxUMBgUAAgcLCg8PDw8PCAMBEAQRDgkphgAAAAAAAADtRQAAAAAAABWuUQ0AAAAAAQABAQUBuAsAAAAAAAAAAwAA',
+    'perpCreate': 'AYc2M664xyp5KtJNEM6BwLktFZKGe8nHZ4sr/N1/Q2NiAUaFUk00hjRntepiLKBYx1aneG3lg5kcd4fmtDf5EguAAQAHEwjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3ACq38i/FXKURYzagZKXUyGrgrNZ6q/nBXkiMdu84t0MHQOxOoB68jlME8rOv28+UDmJSz+f7DikyctWgqP1Y3TjC/C3q86VBlW4wSUr7XUtB/VbcOA19QUe1+c44S4PrPxA0jLRKrGykGaiFbyQkTH7/GFTP04bkVakrmk+F/E5bHyE/llXdldlfk1B55aCwXR0f/kPT8z8MHKBkYbPdom0wsPbPyONS6Kb5g/unF3fCc+JgPx39v9Jq6aRfsGRbk5/Jhgq/aUniTG0SoCsqrE9//2Dg5X5I09gjcg4jvGXDUm2EFrsiKcuNUiOwORj3SQmLZBVa35MNvM3pHa9OoNKZbHA2WN1+L7JGlKrReqzppXUyIk+X4squbmtAaF7V70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0f+GSgRJbzaUOtcJS9pl8/Ro01jF1BPhKM/xbdDMCCvQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqVAKsLXQxF7tViIzK5xNbP94KYbGny4VyzVGLNqxUdH7jJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FnEUJQaE50iL4nCaTuiPRoEZE6K0fJCK9tQodWxPJ96l8ZPDlTK0hFobK0S0yBAzXIdCce15S5fozQxIYCdieKAhazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYDDQAFAoAaBgAQBgAKABIMDgEBDxUMBgUAAgcLCg8PDw8PCAMBEQQSDgkphgAAAAAAAADtRQAAAAAAABWuUQ0AAAAAAQABAQUBuAsAAAAAAAAAAwAA',
     'perpCancel': 'AfcYFzzZqfqxjNcqkrowQV4K1tBVMNye8SD0SBzxL73UseqDd6x0cxmF0kFryb3BfnoQrXs9VUrQkIFHEsS+5QSAAQAEDAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3ACq38i/FXKURYzagZKXUyGrgrNZ6q/nBXkiMdu84t0MHQOxOoB68jlME8rOv28+UDmJSz+f7DikyctWgqP1Y3VsfIT+WVd2V2V+TUHnloLBdHR/+Q9PzPwwcoGRhs92ibTCw9s/I41LopvmD+6cXd8Jz4mA/Hf2/0mrppF+wZFuTn8mGCr9pSeJMbRKgKyqsT3//YODlfkjT2CNyDiO8ZfzdCiRX6NSmHQaJqt+luHP6FgW3N8oBK5dBFah7wURe/hkoESW82lDrXCUvaZfP0aNNYxdQT4SjP8W3QzAgr0ADBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAFAKsLXQxF7tViIzK5xNbP94KYbGny4VyzVGLNqxUdH7w1JthBa7IinLjVIjsDkY90kJi2QVWt+TDbzN6R2vTqDEUJQaE50iL4nCaTuiPRoEZE6K0fJCK9tQodWxPJ96l4Wsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAggABQKAGgYACQoEAwACBQcKAQsGEYcAAAAAAAAAFa5RDQAAAAAAAA==',
 };
 
@@ -59,21 +85,9 @@ function createExchange () {
         'privateKey': testPrivateKey,
     });
     exchange.setMarkets (exchange.parseMarkets (rawMarkets));
-    const replaceHex = (hex, byteOffset, value) => {
-        return hex.slice (0, byteOffset * 2) + value + hex.slice ((byteOffset * 2) + value.length);
-    };
-    const openOrdersAccountData = (mt, orderId, priceInTicks) => {
-        const orderSize = (mt === 'S') ? 144 : 160;
-        let hex = '00'.repeat (64 + orderSize);
-        hex = replaceHex (hex, 60, exchange.solanaU32leHex (1));
-        hex = replaceHex (hex, 64 + 40, exchange.solanaU64leHex (orderId));
-        hex = replaceHex (hex, 64 + 56, exchange.solanaU64leHex (priceInTicks));
-        hex = replaceHex (hex, 64 + 69, exchange.solanaU8Hex (1));
-        return exchange.binaryToBase64 (exchange.base16ToBinary (hex));
-    };
     const accountDataByPubkey: { [key: string]: string } = {};
-    accountDataByPubkey[exchange.fibeGetOpenOrdersPerMarketPda ('S', walletAddress, 0, '1')] = openOrdersAccountData ('S', '123456789', '17896');
-    accountDataByPubkey[exchange.fibeGetOpenOrdersPerMarketPda ('P', walletAddress, 2, '1')] = openOrdersAccountData ('P', '223456789', '17901');
+    accountDataByPubkey[expectedPdas['spotOpenOrders']] = spotOpenOrdersAccount;
+    accountDataByPubkey[expectedPdas['perpOpenOrders']] = perpOpenOrdersAccount;
     const requests = [];
     exchange.solanaRpc = async (url, method, params) => {
         requests.push ({
@@ -102,7 +116,6 @@ function createExchange () {
         return 'fake-signature';
     };
     exchange.solanaGetTokenProgram = async () => tokenProgram;
-    exchange.solanaAccountExists = async () => true;
     exchange.fibeGetTickArraysForOrder = async (url, market) => {
         if (market['mt'] === 'P') {
             return [ perpTickArray ];
@@ -205,6 +218,7 @@ function assertSendTransaction (requests, expectedTransaction, expectedSendOptio
     assert (request['method'] === 'sendTransaction');
     const exchange = createExchange ()['exchange'];
     assert.deepStrictEqual (transactionSemantics (exchange, request['params'][0]), transactionSemantics (exchange, expectedTransaction));
+    assert (request['params'][0] === expectedTransaction);
     assert.deepStrictEqual (request['params'][1], expectedSendOptions);
 }
 
@@ -229,6 +243,34 @@ function assertThrowsWithName (description, call, errorName) {
 async function testFibeLocalTx () {
     {
         const { exchange } = createExchange ();
+        for (let i = 0; i < curvePointVectors.length; i++) {
+            const vector = curvePointVectors[i];
+            assert (exchange.solanaIsOnCurveHex (vector['hex']) === vector['onCurve'], vector['name']);
+        }
+        assert (!exchange.solanaIsOnCurveHex ('00'.repeat (31)));
+        const pdaNames = Object.keys (expectedPdas);
+        for (let i = 0; i < pdaNames.length; i++) {
+            const name = pdaNames[i];
+            assert (!exchange.solanaIsOnCurveHex (exchange.solanaPubkeyHex (expectedPdas[name])), name);
+        }
+    }
+    {
+        const { exchange } = createExchange ();
+        const quoteMint = rawMarkets[0]['quoteMint'];
+        assert (exchange.fibeGetUserStatePda (walletAddress) === expectedPdas['userState']);
+        assert (exchange.fibeGetSubAccountStatePda (walletAddress, 0) === expectedPdas['spotSubAccountState']);
+        assert (exchange.fibeGetSubAccountStatePda (walletAddress, 2) === expectedPdas['perpSubAccountState']);
+        assert (exchange.fibeGetOpenOrdersPerMarketPda ('S', walletAddress, 0, '1') === expectedPdas['spotOpenOrders']);
+        assert (exchange.fibeGetOpenOrdersPerMarketPda ('P', walletAddress, 2, '1') === expectedPdas['perpOpenOrders']);
+        assert (exchange.fibeGetUserMarginAccountPda (walletAddress, 2, quoteMint) === expectedPdas['perpMarginAccount']);
+        assert (exchange.fibeGetTickArrayPda ('S', '1', '17896') === expectedPdas['spotTickArray']);
+        assert (exchange.fibeGetTickArrayPda ('P', '1', '17901') === expectedPdas['perpTickArray']);
+        const ata = exchange.solanaGetAssociatedTokenAddress (quoteMint, walletAddress, tokenProgram);
+        const createAtaIx = exchange.solanaCreateAssociatedTokenAccountIx (walletAddress, ata, walletAddress, quoteMint, tokenProgram);
+        assert (createAtaIx['data'] === '01');
+    }
+    {
+        const { exchange } = createExchange ();
         exchange.randomBytes = () => '0102030405060708';
         assert (exchange.fibeNewOrderId () === '72623859790382856');
     }
@@ -248,6 +290,7 @@ async function testFibeLocalTx () {
         assert (!exchange.fibeIsUnsignedIntegerString ('1.2'));
         assertThrowsWithName ('expected Solana private key parser to reject seed-only hex', () => exchange.solanaParsePrivateKeyHex (seedHex, walletAddress), 'ExchangeError');
         assertThrowsWithName ('expected Solana private key parser to reject seed-only base58', () => exchange.solanaParsePrivateKeyHex (exchange.binaryToBase58 (exchange.base16ToBinary (seedHex)), walletAddress), 'ExchangeError');
+        assertThrowsWithName ('expected Solana private key parser to reject a spliced keypair', () => exchange.solanaParsePrivateKeyHex (seedHex + '00'.repeat (32), '11111111111111111111111111111111'), 'AuthenticationError');
         try {
             exchange.solanaParsePrivateKeyHex ('[256]');
             assert (false, 'expected Solana private key parser to reject invalid byte');

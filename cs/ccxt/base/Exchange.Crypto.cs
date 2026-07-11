@@ -485,6 +485,18 @@ public partial class Exchange
         return base64Sig;
     }
 
+    public object eddsaPublicKey(object secret, object alg = null) => EddsaPublicKey(secret, alg);
+
+    public static object EddsaPublicKey(object secret, object alg = null)
+    {
+        var seed = secret as byte[];
+        if (seed == null || seed.Length != 32)
+        {
+            throw new ArgumentException("Ed25519 secret must be 32 bytes");
+        }
+        return new Ed25519PrivateKeyParameters(seed, 0).GeneratePublicKey().GetEncoded();
+    }
+
     public Int64 crc32(object str, object signed2 = null) => Crc32(str, signed2);
 
     public static Int64 Crc32(object str, object signed2 = null)

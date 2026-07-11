@@ -2084,7 +2084,12 @@ export default class fibe extends Exchange {
         if (secretKeyHex.length !== 128) {
             throw new ExchangeError (this.id + ' invalid Solana secret key length ' + this.numberToString (secretKeyHex.length / 2));
         }
-        return this.binaryToBase58 (this.base16ToBinary (secretKeyHex.slice (64, 128)));
+        const publicKey = this.eddsaPublicKey (this.base16ToBinary (secretKeyHex.slice (0, 64)), ed25519);
+        const publicKeyHex = this.binaryToBase16 (publicKey);
+        if (publicKeyHex !== secretKeyHex.slice (64, 128)) {
+            throw new AuthenticationError (this.id + ' invalid Solana secret key: public key does not match seed');
+        }
+        return this.binaryToBase58 (publicKey);
     }
 
     solanaParsePrivateKeyHex (privateKey, user = undefined) {
@@ -2760,7 +2765,7 @@ export default class fibe extends Exchange {
                 this.solanaAccount (this.solanaSystemProgramId ()),
                 this.solanaAccount (tokenProgram),
             ],
-            'data': '',
+            'data': this.solanaU8Hex (1),
         };
     }
 
@@ -3137,10 +3142,7 @@ export default class fibe extends Exchange {
                 ataMint = this.safeString (market, 'baseMint');
                 ataTokenProgram = tokenProgramBase;
             }
-            const ataExists = await this.solanaAccountExists (rpcUrl, ataToCreate, commitment);
-            if (!ataExists) {
-                ixs.push (this.solanaCreateAssociatedTokenAccountIx (owner, ataToCreate, owner, ataMint, ataTokenProgram));
-            }
+            ixs.push (this.solanaCreateAssociatedTokenAccountIx (owner, ataToCreate, owner, ataMint, ataTokenProgram));
             ixs.push (this.fibeSpotPlaceOrderIx ({
                 'owner': owner,
                 'ownerSubAccountState': this.fibeGetSubAccountStatePda (owner, 0),
@@ -3172,10 +3174,7 @@ export default class fibe extends Exchange {
                 ownerQuoteTokenAccount = this.solanaGetAssociatedTokenAddress (this.safeString (market, 'quoteMint'), owner, tokenProgramQuote);
             }
             if (ownerQuoteTokenAccount !== undefined) {
-                const ownerQuoteTokenAccountExists = await this.solanaAccountExists (rpcUrl, ownerQuoteTokenAccount, commitment);
-                if (!ownerQuoteTokenAccountExists) {
-                    ixs.push (this.solanaCreateAssociatedTokenAccountIx (owner, ownerQuoteTokenAccount, owner, this.safeString (market, 'quoteMint'), tokenProgramQuote));
-                }
+                ixs.push (this.solanaCreateAssociatedTokenAccountIx (owner, ownerQuoteTokenAccount, owner, this.safeString (market, 'quoteMint'), tokenProgramQuote));
             }
             const isCrossMargin = (marginMode === 'cross');
             ixs.push (this.fibePerpPlaceOrderIx ({
@@ -3326,11 +3325,6 @@ export default class fibe extends Exchange {
         return owner;
     }
 
-    async solanaAccountExists (rpcUrl, pubkey, commitment = 'confirmed'): Promise<boolean> {
-        const accountInfo = await this.solanaGetAccountInfo (rpcUrl, pubkey, commitment);
-        return accountInfo !== undefined;
-    }
-
     async solanaGetAccountData (rpcUrl, pubkey, commitment = 'confirmed'): Promise<string> {
         const accountInfo = await this.solanaGetAccountInfo (rpcUrl, pubkey, commitment);
         if (accountInfo === undefined) {
@@ -3409,11 +3403,11 @@ export default class fibe extends Exchange {
             'method': method,
             'params': params,
         }));
-        if (response['error'] !== undefined) {
-            const error = response['error'];
+        const error = this.safeValue (response, 'error');
+        if (error !== undefined) {
             throw new ExchangeError (this.id + ' Solana RPC ' + method + ' failed: ' + this.json (error));
         }
-        return response['result'];
+        return this.safeValue (response, 'result');
     }
 
     parseOrderStatus (status: Str): Str {
