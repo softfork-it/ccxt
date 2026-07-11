@@ -400,6 +400,36 @@ func (this *Exchange) EddsaPublicKey(secret any, curve any) any {
 	return EddsaPublicKey(secret, curve)
 }
 
+func EddsaPointIsValid(point any, curve any) bool {
+	var encoded []uint8
+	if value, ok := point.([]uint8); ok {
+		encoded = value
+	} else if value, ok := point.([]any); ok {
+		encoded, _ = interfacesToBytes(value)
+	}
+	if len(encoded) != 32 {
+		return false
+	}
+	// Solana uses ZIP-215 decoding: reduce y modulo p and accept either sign for x = 0.
+	reversed := make([]byte, 32)
+	for i := range encoded {
+		reversed[31-i] = encoded[i]
+	}
+	reversed[0] &= 127
+	p := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 255), big.NewInt(19))
+	y := new(big.Int).Mod(new(big.Int).SetBytes(reversed), p)
+	y2 := new(big.Int).Mod(new(big.Int).Mul(y, y), p)
+	d, _ := new(big.Int).SetString("37095705934669439343138083508754565189542113879843219016388785533085940283555", 10)
+	v := new(big.Int).Add(new(big.Int).Mul(d, y2), big.NewInt(1))
+	x2 := new(big.Int).Mod(new(big.Int).Mul(new(big.Int).Sub(y2, big.NewInt(1)), new(big.Int).Exp(v, new(big.Int).Sub(p, big.NewInt(2)), p)), p)
+	legendre := new(big.Int).Exp(x2, new(big.Int).Rsh(new(big.Int).Sub(p, big.NewInt(1)), 1), p)
+	return x2.Sign() == 0 || legendre.Cmp(big.NewInt(1)) == 0
+}
+
+func (this *Exchange) EddsaPointIsValid(point any, curve any) any {
+	return EddsaPointIsValid(point, curve)
+}
+
 // func Ecdsa(request any, secret any, alg any, hash any) string {
 // 	return "" // to do
 // }

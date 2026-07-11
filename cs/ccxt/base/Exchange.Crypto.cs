@@ -1,5 +1,6 @@
 using System.Text;
 using System.Security.Cryptography;
+using System.Numerics;
 using System.IO.Compression;
 using Cryptography.ECDSA;
 using Nethereum.Util;
@@ -495,6 +496,30 @@ public partial class Exchange
             throw new ArgumentException("Ed25519 secret must be 32 bytes");
         }
         return new Ed25519PrivateKeyParameters(seed, 0).GeneratePublicKey().GetEncoded();
+    }
+
+    public object eddsaPointIsValid(object point, object alg = null) => EddsaPointIsValid(point, alg);
+
+    public static bool EddsaPointIsValid(object point, object alg = null)
+    {
+        var encoded = point as byte[];
+        if (encoded == null || encoded.Length != 32)
+        {
+            return false;
+        }
+        // Solana uses ZIP-215 decoding: reduce y modulo p and accept either sign for x = 0.
+        encoded = (byte[])encoded.Clone();
+        encoded[31] &= 127;
+        var p = (BigInteger.One << 255) - 19;
+        var y = new BigInteger(encoded) % p;
+        var y2 = y * y % p;
+        var d = BigInteger.Parse("37095705934669439343138083508754565189542113879843219016388785533085940283555");
+        var x2 = (y2 - 1) * BigInteger.ModPow(d * y2 + 1, p - 2, p) % p;
+        if (x2 < 0)
+        {
+            x2 += p;
+        }
+        return x2.IsZero || BigInteger.ModPow(x2, (p - 1) / 2, p).IsOne;
     }
 
     public Int64 crc32(object str, object signed2 = null) => Crc32(str, signed2);

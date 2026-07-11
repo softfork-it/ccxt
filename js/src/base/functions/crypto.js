@@ -111,6 +111,20 @@ function eddsaPublicKey(secret, curve) {
     }
     return curve.getPublicKey(secret);
 }
+function eddsaPointIsValid(point, curve) {
+    if (point.length !== 32) {
+        return false;
+    }
+    try {
+        // Non-strict ZIP-215 decoding matches curve25519-dalek/Solana.
+        // @ts-ignore
+        curve.ExtendedPoint.fromHex(point, false);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
 /*  ------------------------------------------------------------------------ */
 // source: https://stackoverflow.com/a/18639975/1067003
 function crc32(str, signed = false) {
@@ -133,5 +147,5 @@ function crc32(str, signed = false) {
     }
 }
 /*  ------------------------------------------------------------------------ */
-export { hash, hmac, crc32, ecdsa, eddsa, eddsaPublicKey, axolotl, };
+export { hash, hmac, crc32, ecdsa, eddsa, eddsaPublicKey, eddsaPointIsValid, axolotl, };
 /*  ------------------------------------------------------------------------ */

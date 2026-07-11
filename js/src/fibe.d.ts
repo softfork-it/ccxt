@@ -96,20 +96,6 @@ export default class fibe extends Exchange {
     solanaIsHexString(value: any): boolean;
     solanaPublicKeyFromSecretKeyHex(secretKeyHex: any): string;
     solanaParsePrivateKeyHex(privateKey: any, user?: any): any;
-    solanaFieldP(): number[];
-    solanaFieldD(): number[];
-    solanaFieldOne(): number[];
-    solanaFieldCompare(a: any, b: any): 0 | 1 | -1;
-    solanaFieldNormalize(input: any): any[];
-    solanaFieldSubNoNormalize(a: any, b: any): any[];
-    solanaFieldSub(a: any, b: any): any[];
-    solanaFieldAdd(a: any, b: any): any[];
-    solanaFieldMul(a: any, b: any): any[];
-    solanaFieldSquare(a: any): any[];
-    solanaFieldPow(a: any, exponentHex: any): number[];
-    solanaFieldIsZero(a: any): boolean;
-    solanaFieldIsOne(a: any): boolean;
-    solanaFieldFromLittleEndianHex(hex: any): any[];
     solanaIsOnCurveHex(candidateHex: any): boolean;
     solanaFindProgramAddress(seeds: any, programId: any): string;
     fibePda(seeds: any, programId?: any): string;
@@ -164,6 +150,25 @@ export default class fibe extends Exchange {
         }[];
         data: string;
     };
+    solanaSystemTransferIx(source: any, destination: any, lamports: any): {
+        programId: string;
+        accounts: {
+            pubkey: any;
+            isWritable: boolean;
+            isSigner: boolean;
+        }[];
+        data: string;
+    };
+    solanaSyncNativeIx(account: any, tokenProgram: any): {
+        programId: any;
+        accounts: {
+            pubkey: any;
+            isWritable: boolean;
+            isSigner: boolean;
+        }[];
+        data: string;
+    };
+    solanaWrapNativeIfNeeded(rpcUrl: any, owner: any, tokenProgram: any, amount: any, commitment?: string): Promise<any[]>;
     solanaSetComputeUnitLimitIx(units: any): {
         programId: string;
         accounts: any[];
