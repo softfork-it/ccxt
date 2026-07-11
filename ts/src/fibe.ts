@@ -34,8 +34,8 @@ export default class fibe extends Exchange {
                 'swap': true,
                 'future': false,
                 'option': false,
-                'cancelOrder': true,
                 'cancelAllOrders': true,
+                'cancelOrder': true,
                 'cancelOrders': true,
                 'createOrder': true,
                 'fetchBalance': true,
@@ -114,8 +114,8 @@ export default class fibe extends Exchange {
             'requiredCredentials': {
                 'apiKey': false,
                 'secret': false,
-                'walletAddress': false,
-                'privateKey': false,
+                'walletAddress': true,
+                'privateKey': true,
             },
             'precisionMode': TICK_SIZE,
             'exceptions': {
@@ -239,7 +239,7 @@ export default class fibe extends Exchange {
                 'cost': { 'min': undefined, 'max': undefined },
             },
             'created': undefined,
-            'info': this.extend ({}, market, {
+            'info': this.extend (market, {
                 'mi': mi,
                 'mt': mt,
             }),
@@ -851,10 +851,15 @@ export default class fibe extends Exchange {
         const response = await this.publicGetUserTrades (this.extend (request, params));
         let trades = this.parseTrades (response, market, since, undefined);
         if (until !== undefined) {
-            trades = trades.filter ((trade) => {
+            const filtered = [];
+            for (let i = 0; i < trades.length; i++) {
+                const trade = trades[i];
                 const timestamp = this.safeInteger (trade, 'timestamp');
-                return (timestamp !== undefined) && (timestamp <= until);
-            });
+                if ((timestamp !== undefined) && (timestamp <= until)) {
+                    filtered.push (trade);
+                }
+            }
+            trades = filtered;
         }
         return this.filterBySinceLimit (trades, since, limit) as Trade[];
     }
@@ -935,7 +940,7 @@ export default class fibe extends Exchange {
         if (since !== undefined) {
             startTimestamp = this.parseToInt (since / 1000);
             if (until === undefined) {
-                endTimestamp = Math.min (startTimestamp + (requestLimit * duration), this.seconds ());
+                endTimestamp = Math.min (this.sum (startTimestamp, requestLimit * duration), this.seconds ());
             }
         }
         let mt = 'P';
@@ -1476,7 +1481,7 @@ export default class fibe extends Exchange {
         if (symbol === undefined) {
             throw new ArgumentsRequired (this.id + ' cancelOrders() requires a symbol for local tx construction');
         }
-        const orders: Order[] = [];
+        const orders = [];
         for (let i = 0; i < ids.length; i++) {
             const order = await this.cancelOrder (ids[i], symbol, this.extend ({}, params));
             orders.push (order);
@@ -1503,7 +1508,7 @@ export default class fibe extends Exchange {
             fetchOpenOrdersParams['user'] = user;
         }
         const openOrders = await this.fetchOpenOrders (symbol, undefined, undefined, fetchOpenOrdersParams);
-        const ids: string[] = [];
+        const ids = [];
         for (let i = 0; i < openOrders.length; i++) {
             const id = this.safeString (openOrders[i], 'id');
             if (id === undefined) {
@@ -1621,11 +1626,11 @@ export default class fibe extends Exchange {
     solanaHexByte (hex, index) {
         const hi = this.solanaHexNibble (hex[index]);
         const lo = this.solanaHexNibble (hex[index + 1]);
-        return (hi * 16) + lo;
+        return this.sum (hi * 16, lo);
     }
 
     fibeIsUnsignedIntegerString (value) {
-        if (value == undefined) {
+        if ((value === undefined) || (value === null)) {
             return false;
         }
         const stringValue = this.numberToString (value);
@@ -1752,7 +1757,7 @@ export default class fibe extends Exchange {
         const whole = this.fibeDecimalStringStripZeros (this.safeString (parts, 0, '0'));
         const fraction = this.safeString (parts, 1, '');
         const division = this.fibeDecimalStringDivmod (whole, divisor);
-        let quotient = this.safeString (division, 'quotient');
+        const quotient = this.safeString (division, 'quotient');
         const remainder = this.safeInteger (division, 'remainder', 0);
         if (!roundUp) {
             return quotient;
@@ -2152,213 +2157,11 @@ export default class fibe extends Exchange {
         return rawHex.slice (0, 64);
     }
 
-    solanaFieldP () {
-        return [ 65517, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 32767 ];
-    }
-
-    solanaFieldD () {
-        return [ 30883, 4953, 19914, 30187, 55467, 16705, 2637, 112, 59544, 30585, 16505, 36039, 65139, 11119, 27886, 20995 ];
-    }
-
-    solanaFieldOne () {
-        return [ 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ];
-    }
-
-    solanaFieldCompare (a, b) {
-        let i = 15;
-        while (i >= 0) {
-            const ai = this.safeInteger (a, i, 0);
-            const bi = this.safeInteger (b, i, 0);
-            if (ai > bi) {
-                return 1;
-            }
-            if (ai < bi) {
-                return -1;
-            }
-            i = i - 1;
-        }
-        return 0;
-    }
-
-    solanaFieldNormalize (input) {
-        const result = [];
-        for (let i = 0; i < 32; i++) {
-            result.push (this.safeInteger (input, i, 0));
-        }
-        for (let carryPass = 0; carryPass < 3; carryPass++) {
-            for (let i = 0; i < 31; i++) {
-                const carry = this.parseToInt (result[i] / 65536);
-                result[i] = result[i] - (carry * 65536);
-                result[i + 1] = this.sum (result[i + 1], carry);
-            }
-            let highIndex = 31;
-            while (highIndex >= 16) {
-                if (result[highIndex] !== 0) {
-                    result[highIndex - 16] = this.sum (result[highIndex - 16], result[highIndex] * 38);
-                    result[highIndex] = 0;
-                }
-                highIndex = highIndex - 1;
-            }
-            const highCarry = this.parseToInt (result[15] / 32768);
-            if (highCarry > 0) {
-                result[15] = result[15] - (highCarry * 32768);
-                result[0] = this.sum (result[0], highCarry * 19);
-            }
-        }
-        const out = [];
-        for (let i = 0; i < 16; i++) {
-            out.push (result[i]);
-        }
-        const p = this.solanaFieldP ();
-        for (let reductionPass = 0; reductionPass < 20; reductionPass++) {
-            if (this.solanaFieldCompare (out, p) >= 0) {
-                const reduced = this.solanaFieldSubNoNormalize (out, p);
-                for (let i = 0; i < 16; i++) {
-                    out[i] = reduced[i];
-                }
-            }
-        }
-        return out;
-    }
-
-    solanaFieldSubNoNormalize (a, b) {
-        const result = [];
-        let borrow = 0;
-        for (let i = 0; i < 16; i++) {
-            let value = this.safeInteger (a, i, 0) - this.safeInteger (b, i, 0) - borrow;
-            if (value < 0) {
-                value += 65536;
-                borrow = 1;
-            } else {
-                borrow = 0;
-            }
-            result.push (value);
-        }
-        return result;
-    }
-
-    solanaFieldSub (a, b) {
-        const p = this.solanaFieldP ();
-        const result = [];
-        let borrow = 0;
-        for (let i = 0; i < 16; i++) {
-            const left = this.sum (this.safeInteger (a, i, 0), p[i]);
-            let value = left - this.safeInteger (b, i, 0) - borrow;
-            if (value < 0) {
-                value += 65536;
-                borrow = 1;
-            } else {
-                borrow = 0;
-            }
-            result.push (value);
-        }
-        return this.solanaFieldNormalize (result);
-    }
-
-    solanaFieldAdd (a, b) {
-        const result = [];
-        for (let i = 0; i < 16; i++) {
-            result.push (this.sum (this.safeInteger (a, i, 0), this.safeInteger (b, i, 0)));
-        }
-        return this.solanaFieldNormalize (result);
-    }
-
-    solanaFieldMul (a, b) {
-        const result = [];
-        for (let i = 0; i < 32; i++) {
-            result.push (0);
-        }
-        for (let i = 0; i < 16; i++) {
-            for (let j = 0; j < 16; j++) {
-                const index = this.sum (i, j);
-                result[index] = this.sum (result[index], this.safeInteger (a, i, 0) * this.safeInteger (b, j, 0));
-            }
-        }
-        return this.solanaFieldNormalize (result);
-    }
-
-    solanaFieldSquare (a) {
-        return this.solanaFieldMul (a, a);
-    }
-
-    solanaFieldPow (a, exponentHex) {
-        let result = this.solanaFieldOne ();
-        let i = 0;
-        while (i < exponentHex.length) {
-            const nibble = this.solanaHexNibble (exponentHex[i]);
-            for (let bitOffset = 0; bitOffset < 4; bitOffset++) {
-                const bit = 3 - bitOffset;
-                result = this.solanaFieldSquare (result);
-                const divisor = Math.pow (2, bit);
-                const shifted = this.parseToInt (nibble / divisor);
-                const bitSet = shifted % 2;
-                if (bitSet === 1) {
-                    result = this.solanaFieldMul (result, a);
-                }
-            }
-            i = i + 1;
-        }
-        return result;
-    }
-
-    solanaFieldIsZero (a) {
-        for (let i = 0; i < 16; i++) {
-            if (this.safeInteger (a, i, 0) !== 0) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    solanaFieldIsOne (a) {
-        if (this.safeInteger (a, 0, 0) !== 1) {
-            return false;
-        }
-        for (let i = 1; i < 16; i++) {
-            if (this.safeInteger (a, i, 0) !== 0) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    solanaFieldFromLittleEndianHex (hex) {
-        const result = [];
-        for (let i = 0; i < 16; i++) {
-            const offset = i * 4;
-            const b0 = this.solanaHexByte (hex, offset);
-            const b1 = this.solanaHexByte (hex, offset + 2);
-            result.push (b0 + (b1 * 256));
-        }
-        return this.solanaFieldNormalize (result);
-    }
-
     solanaIsOnCurveHex (candidateHex) {
         if (candidateHex.length !== 64) {
             return false;
         }
-        let lastByte = this.solanaHexByte (candidateHex, 62);
-        if (lastByte >= 128) {
-            lastByte = lastByte - 128;
-        }
-        const yHex = candidateHex.slice (0, 62) + this.solanaU8Hex (lastByte);
-        const y = this.solanaFieldFromLittleEndianHex (yHex);
-        const p = this.solanaFieldP ();
-        if (this.solanaFieldCompare (y, p) >= 0) {
-            return false;
-        }
-        const one = this.solanaFieldOne ();
-        const y2 = this.solanaFieldSquare (y);
-        const u = this.solanaFieldSub (y2, one);
-        const dy2 = this.solanaFieldMul (this.solanaFieldD (), y2);
-        const v = this.solanaFieldAdd (dy2, one);
-        const invV = this.solanaFieldPow (v, '7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeb');
-        const x2 = this.solanaFieldMul (u, invV);
-        if (this.solanaFieldIsZero (x2)) {
-            return true;
-        }
-        const legendre = this.solanaFieldPow (x2, '3ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff6');
-        return this.solanaFieldIsOne (legendre);
+        return this.eddsaPointIsValid (this.base16ToBinary (candidateHex), ed25519);
     }
 
     solanaFindProgramAddress (seeds, programId) {
@@ -2491,7 +2294,7 @@ export default class fibe extends Exchange {
         const tickStride = this.fibeTickArrayStride (mt);
         const ticks = [];
         for (let i = 0; i < this.fibeTickSizeInArray (); i++) {
-            const offset = 32 + (i * tickStride);
+            const offset = this.sum (32, i * tickStride);
             const filled = this.solanaReadU64FromHex (hex, offset + 8);
             const total0 = this.solanaReadU64FromHex (hex, offset + 16);
             const total1 = this.solanaReadU64FromHex (hex, offset + 32);
@@ -2565,7 +2368,7 @@ export default class fibe extends Exchange {
         const ticks = this.safeList (state, 'ticks', []);
         let remainingLots = lots;
         for (let i = 0; i < ticks.length; i++) {
-            const tickIndex = startTick + i;
+            const tickIndex = this.sum (startTick, i);
             if (tickIndex > priceInTicks) {
                 break;
             }
@@ -2583,7 +2386,7 @@ export default class fibe extends Exchange {
         let remainingLots = lots;
         for (let revIndex = 0; revIndex < ticks.length; revIndex++) {
             const index = ticks.length - revIndex - 1;
-            const tickIndex = startTick + this.fibeTickSizeInArray () - revIndex - 1;
+            const tickIndex = this.sum (startTick, this.fibeTickSizeInArray ()) - revIndex - 1;
             if (tickIndex < priceInTicks) {
                 break;
             }
@@ -2644,7 +2447,7 @@ export default class fibe extends Exchange {
             beforeCount = Math.floor ((toIndex - fromIndex) / tickSize);
         }
         for (let i = 0; i < beforeCount; i++) {
-            const index = fromIndex + (i * tickSize);
+            const index = this.sum (fromIndex, i * tickSize);
             allIndexes.push (index);
         }
         for (let i = 0; i < tickArrayIndexes.length; i++) {
@@ -2655,14 +2458,14 @@ export default class fibe extends Exchange {
             const lastIndex = tickArrayIndexes.length - 1;
             lastTickIndex = tickArrayIndexes[lastIndex];
         }
-        const fromIndexAfter = lastTickIndex + this.fibeTickSizeInArray ();
-        const toIndexAfter = Math.min (fromIndexAfter + (this.fibeTickSizeInArray () * 2), currentIndex);
+        const fromIndexAfter = this.sum (lastTickIndex, this.fibeTickSizeInArray ());
+        const toIndexAfter = Math.min (this.sum (fromIndexAfter, this.fibeTickSizeInArray () * 2), currentIndex);
         let afterCount = 0;
         if (fromIndexAfter < toIndexAfter) {
             afterCount = Math.floor ((toIndexAfter - fromIndexAfter) / tickSize);
         }
         for (let i = 0; i < afterCount; i++) {
-            const index = fromIndexAfter + (i * tickSize);
+            const index = this.sum (fromIndexAfter, i * tickSize);
             allIndexes.push (index);
         }
         allIndexes.push (currentIndex);
@@ -2673,14 +2476,14 @@ export default class fibe extends Exchange {
         const currentIndex = parseInt (this.fibeGetTickArrayStartTick (this.numberToString (priceInTicks)));
         const allIndexes = [ currentIndex ];
         const toIndex = (tickArrayIndexes.length > 0) ? tickArrayIndexes[0] : currentIndex;
-        const fromIndex = Math.max (Math.max (toIndex - (this.fibeTickSizeInArray () * 2), 0), currentIndex + this.fibeTickSizeInArray ());
+        const fromIndex = Math.max (Math.max (toIndex - (this.fibeTickSizeInArray () * 2), 0), this.sum (currentIndex, this.fibeTickSizeInArray ()));
         const tickSize = this.fibeTickSizeInArray ();
         let beforeCount = 0;
         if (fromIndex < toIndex) {
             beforeCount = Math.floor ((toIndex - fromIndex) / tickSize);
         }
         for (let i = 0; i < beforeCount; i++) {
-            const index = fromIndex + (i * tickSize);
+            const index = this.sum (fromIndex, i * tickSize);
             allIndexes.push (index);
         }
         for (let i = 0; i < tickArrayIndexes.length; i++) {
@@ -2691,14 +2494,14 @@ export default class fibe extends Exchange {
             const lastIndex = tickArrayIndexes.length - 1;
             lastTickIndex = tickArrayIndexes[lastIndex];
         }
-        const fromIndexAfter = lastTickIndex + this.fibeTickSizeInArray ();
-        const toIndexAfter = Math.min (fromIndexAfter + (this.fibeTickSizeInArray () * 2), this.fibeMaxTick ());
+        const fromIndexAfter = this.sum (lastTickIndex, this.fibeTickSizeInArray ());
+        const toIndexAfter = Math.min (this.sum (fromIndexAfter, this.fibeTickSizeInArray () * 2), this.fibeMaxTick ());
         let afterCount = 0;
         if (fromIndexAfter < toIndexAfter) {
             afterCount = Math.floor ((toIndexAfter - fromIndexAfter) / tickSize);
         }
         for (let i = 0; i < afterCount; i++) {
-            const index = fromIndexAfter + (i * tickSize);
+            const index = this.sum (fromIndexAfter, i * tickSize);
             allIndexes.push (index);
         }
         return allIndexes;
@@ -2721,7 +2524,7 @@ export default class fibe extends Exchange {
                 buyCandidateCount = Math.floor ((endIndex - lowestAskStart) / buyTickSize);
             }
             for (let i = 0; i < buyCandidateCount; i++) {
-                const index = lowestAskStart + (i * buyTickSize);
+                const index = this.sum (lowestAskStart, i * buyTickSize);
                 candidates.push (this.fibeGetTickArrayPda (mt, mi, this.numberToString (index)));
             }
             const buyStates = await this.fibeGetTickArrayStates (rpcUrl, market, candidates, commitment);
@@ -2734,14 +2537,14 @@ export default class fibe extends Exchange {
             return buyResult;
         }
         const highestBidStart = parseInt (this.safeString (bitmap, 'bidTickUpperBound'));
-        const fromIndex = parseInt (this.fibeGetTickArrayStartTick (priceInTicks)) + this.fibeTickSizeInArray ();
+        const fromIndex = this.sum (parseInt (this.fibeGetTickArrayStartTick (priceInTicks)), this.fibeTickSizeInArray ());
         const sellTickSize = this.fibeTickSizeInArray ();
         let sellCandidateCount = 0;
         if (fromIndex <= highestBidStart) {
             sellCandidateCount = Math.floor ((highestBidStart - fromIndex) / sellTickSize) + 1;
         }
         for (let i = 0; i < sellCandidateCount; i++) {
-            const index = fromIndex + (i * sellTickSize);
+            const index = this.sum (fromIndex, i * sellTickSize);
             candidates.push (this.fibeGetTickArrayPda (mt, mi, this.numberToString (index)));
         }
         const sellStates = await this.fibeGetTickArrayStates (rpcUrl, market, candidates, commitment);
@@ -3148,7 +2951,7 @@ export default class fibe extends Exchange {
             if ((clientOrderId === orderId) && (stateBit === 1)) {
                 return this.solanaReadU64FromHex (hex, offset + 56);
             }
-            offset = offset + orderSize;
+            offset = this.sum (offset, orderSize);
         }
         throw new ExchangeError (this.id + ' cancelOrder() could not find open order ' + orderId);
     }

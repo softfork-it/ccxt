@@ -601,6 +601,25 @@ public final class Crypto {
             .getEncoded();
     }
 
+    public static boolean EddsaPointIsValid(Object point, Object alg) {
+        if (!(point instanceof byte[] encoded) || encoded.length != 32) {
+            return false;
+        }
+        // Solana uses ZIP-215 decoding: reduce y modulo p and accept either sign for x = 0.
+        BigInteger y = BigInteger.ZERO;
+        for (int i = 31; i >= 0; i--) {
+            int value = encoded[i] & 0xff;
+            y = y.shiftLeft(8).add(BigInteger.valueOf(i == 31 ? value & 0x7f : value));
+        }
+        BigInteger p = BigInteger.ONE.shiftLeft(255).subtract(BigInteger.valueOf(19));
+        y = y.mod(p);
+        BigInteger y2 = y.multiply(y).mod(p);
+        BigInteger d = new BigInteger("37095705934669439343138083508754565189542113879843219016388785533085940283555");
+        BigInteger x2 = y2.subtract(BigInteger.ONE)
+            .multiply(d.multiply(y2).add(BigInteger.ONE).modPow(p.subtract(BigInteger.TWO), p)).mod(p);
+        return x2.signum() == 0 || x2.modPow(p.subtract(BigInteger.ONE).divide(BigInteger.TWO), p).equals(BigInteger.ONE);
+    }
+
     /**
      * Extract the 32-byte Ed25519 seed from various secret formats:
      * - byte[] of exactly 32 bytes: used directly
