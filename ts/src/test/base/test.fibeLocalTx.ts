@@ -317,6 +317,29 @@ async function testFibeLocalTx () {
     }
     {
         const { exchange } = createExchange ();
+        const ata = exchange.solanaGetAssociatedTokenAddress (exchange.solanaNativeMint (), walletAddress, tokenProgram);
+        exchange.solanaGetAccountInfo = async () => undefined;
+        let instructions = await exchange.solanaWrapNativeIfNeeded (rpcUrl, walletAddress, tokenProgram, '100', 'confirmed');
+        assert (instructions.length === 3);
+        assert (instructions[0]['programId'] === exchange.solanaAssociatedTokenProgramId ());
+        assert (instructions[1]['programId'] === exchange.solanaSystemProgramId ());
+        assert (instructions[1]['accounts'][1]['pubkey'] === ata);
+        assert (instructions[1]['data'] === '020000006400000000000000');
+        assert (instructions[2]['programId'] === tokenProgram);
+        assert (instructions[2]['data'] === '11');
+        exchange.solanaGetAccountInfo = async () => ({ 'owner': tokenProgram });
+        exchange.solanaRpc = async (url, method) => {
+            assert (method === 'getTokenAccountBalance');
+            return { 'value': { 'amount': '40' } };
+        };
+        instructions = await exchange.solanaWrapNativeIfNeeded (rpcUrl, walletAddress, tokenProgram, '100', 'confirmed');
+        assert (instructions.length === 2);
+        assert (instructions[0]['data'] === '020000003c00000000000000');
+        instructions = await exchange.solanaWrapNativeIfNeeded (rpcUrl, walletAddress, tokenProgram, '40', 'confirmed');
+        assert (instructions.length === 0);
+    }
+    {
+        const { exchange } = createExchange ();
         const emptyTicks = () => {
             const ticks = [];
             for (let i = 0; i < exchange.fibeTickSizeInArray (); i++) {
@@ -595,6 +618,45 @@ async function testFibeLocalTx () {
     }
     {
         const { exchange, requests } = createExchange ();
+        exchange.market ('ETH/USDC')['info']['baseMint'] = exchange.solanaNativeMint ();
+        let wrappedAmount = undefined;
+        exchange.solanaWrapNativeIfNeeded = async (url, owner, program, amount) => {
+            wrappedAmount = amount;
+            return [];
+        };
+        const order = await exchange.createOrder ('ETH/USDC', 'limit', 'sell', 0.00002, 1789.6, {
+            'rpcUrl': rpcUrl,
+            'orderId': '123456794',
+        });
+        assert (wrappedAmount === '2000');
+        assert (order['symbol'] === 'ETH/USDC');
+        assert (requests[requests.length - 1]['method'] === 'sendTransaction');
+    }
+    {
+        const { exchange, requests } = createExchange ();
+        exchange.market ('ETH/USDC')['info']['baseMint'] = exchange.solanaNativeMint ();
+        exchange.solanaWrapNativeIfNeeded = async () => {
+            assert (false, 'buying SOL must not wrap the receiving asset');
+        };
+        const order = await exchange.createOrder ('ETH/USDC', 'limit', 'buy', 0.00002, 1789.6, {
+            'rpcUrl': rpcUrl,
+            'orderId': '123456795',
+        });
+        assert (order['symbol'] === 'ETH/USDC');
+        assert (requests[requests.length - 1]['method'] === 'sendTransaction');
+    }
+    {
+        const { exchange, requests } = createExchange ();
+        exchange.market ('ETH/USDC')['info']['baseMint'] = exchange.solanaNativeMint ();
+        const order = await exchange.cancelOrder ('123456789', 'ETH/USDC', {
+            'rpcUrl': rpcUrl,
+        });
+        assert (order['status'] === 'canceled');
+        assert (requests[requests.length - 1]['method'] === 'sendTransaction');
+    }
+    {
+        const { exchange, requests } = createExchange ();
+        exchange.market ('ETH/USDC:USDC')['info']['baseMint'] = exchange.solanaNativeMint ();
         const order = await exchange.createOrder ('ETH/USDC:USDC', 'limit', 'sell', 0.00003, 1790.1, {
             'rpcUrl': rpcUrl,
             'orderId': '223456789',
@@ -616,6 +678,7 @@ async function testFibeLocalTx () {
     }
     {
         const { exchange, requests } = createExchange ();
+        exchange.market ('ETH/USDC:USDC')['info']['baseMint'] = exchange.solanaNativeMint ();
         const order = await exchange.cancelOrder ('223456789', 'ETH/USDC:USDC', {
             'rpcUrl': rpcUrl,
             'subAccountIndex': 2,
