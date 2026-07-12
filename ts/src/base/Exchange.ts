@@ -94,6 +94,8 @@ const {
     json,
     binaryConcat,
     hash,
+    eddsaPublicKey,
+    eddsaPointIsValid,
     // ecdsa,
     arrayConcat,
     encode,
@@ -537,6 +539,8 @@ export class BaseExchange {
     json = json;
     binaryConcat = binaryConcat;
     hash = hash;
+    eddsaPublicKey = eddsaPublicKey;
+    eddsaPointIsValid = eddsaPointIsValid;
     arrayConcat = arrayConcat;
     encode = encode;
     urlencode = urlencode;

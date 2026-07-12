@@ -190,6 +190,21 @@ function eddsa (request: Hex, secret: Input, curve: CurveFnEDDSA) {
     return base64.encode (signature)
 }
 
+function eddsaPublicKey (secret: Input, curve: CurveFnEDDSA) {
+    const privateKey = utf8Bytes (secret);
+    if (privateKey.length !== 32) {
+        throw new Error ('Ed25519 secret must be 32 bytes');
+    }
+    return curve.getPublicKey (privateKey);
+}
+
+function eddsaPointIsValid (point: Uint8Array, curve: CurveFnEDDSA) {
+    if (point.length !== 32) {
+        return false;
+    }
+    return curve.utils.isValidPublicKey (point, true);
+}
+
 /*  ------------------------------------------------------------------------ */
 
 // source: https://stackoverflow.com/a/18639975/1067003
@@ -221,6 +236,8 @@ export {
     crc32,
     ecdsa,
     eddsa,
+    eddsaPublicKey,
+    eddsaPointIsValid,
     pemToDer,
 };
 

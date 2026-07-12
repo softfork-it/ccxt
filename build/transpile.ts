@@ -2941,6 +2941,7 @@ class Transpiler {
             [ /(export default .*)/g, '' ],
             [ /testCryptography/g, 'test_cryptography' ],
         ])
+        js = js.replace (/exchange\.(\w+)/g, (_, method) => 'exchange.' + unCamelCase (method))
 
         let { python2Body, phpBody } = this.transpileJavaScriptToPythonAndPHP ({ js, removeEmptyLines: false })
 

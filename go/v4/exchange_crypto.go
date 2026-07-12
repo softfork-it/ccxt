@@ -17,6 +17,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"hash/crc32"
+	"math/big"
 	"strings"
 
 	"golang.org/x/crypto/sha3"
@@ -116,10 +117,20 @@ func (this *BaseExchange) Hash(request2 any, hash func() string, args ...any) an
 }
 
 func Hash(request2 any, hash func() string, digest2 any) any {
-	var request string
+	var request []byte
 	switch v := request2.(type) {
 	case string:
+		request = []byte(v)
+	case []uint8:
 		request = v
+	case []any:
+		var err error
+		request, err = interfacesToBytes(v)
+		if err != nil {
+			panic(err)
+		}
+	default:
+		panic(fmt.Sprintf("Hash: unsupported request type %T", request2))
 	}
 
 	algorithm := hash()
@@ -159,33 +170,33 @@ func (this *BaseExchange) Axolotl(a any, b any, c any) string {
 	return ""
 }
 
-func signSHA256(data string) []byte {
+func signSHA256(data []byte) []byte {
 	h := sha256Hash.New()
-	h.Write([]byte(data))
+	h.Write(data)
 	return h.Sum(nil)
 }
 
-func signSHA512(data string) []byte {
+func signSHA512(data []byte) []byte {
 	h := sha512Hash.New()
-	h.Write([]byte(data))
+	h.Write(data)
 	return h.Sum(nil)
 }
 
-func signSHA384(data string) []byte {
+func signSHA384(data []byte) []byte {
 	h := sha512Hash.New384()
-	h.Write([]byte(data))
+	h.Write(data)
 	return h.Sum(nil)
 }
 
-func signSHA1(data string) []byte {
+func signSHA1(data []byte) []byte {
 	h := sha1Hash.New()
-	h.Write([]byte(data))
+	h.Write(data)
 	return h.Sum(nil)
 }
 
-func signMD5(data string) []byte {
+func signMD5(data []byte) []byte {
 	h := md5Hash.New()
-	h.Write([]byte(data))
+	h.Write(data)
 	return h.Sum(nil)
 }
 
@@ -358,7 +369,21 @@ func Base64ToBase64URL(base64Str string, stripPadding bool) string {
 
 func Eddsa(data2 any, secret any, curve any) string {
 	// it should use ed25519 and return a base64 string
-	data := derefScalar(data2).(string)
+	var data []byte
+	switch value := data2.(type) {
+	case string:
+		data = []byte(value)
+	case []uint8:
+		data = value
+	case []any:
+		var err error
+		data, err = interfacesToBytes(value)
+		if err != nil {
+			panic(err)
+		}
+	default:
+		panic(fmt.Sprintf("Eddsa: unsupported request type %T", data2))
+	}
 	secretsBytes := []uint8{}
 	if s, ok := secret.([]uint8); ok {
 		secretsBytes = s
@@ -402,12 +427,68 @@ func Eddsa(data2 any, secret any, curve any) string {
 	if key == nil {
 		panic("invalid ed25519 secret")
 	}
-	signature := ed25.Sign(key, []byte(data))
+	signature := ed25.Sign(key, data)
 	if signature == nil {
 		return ""
 	}
 	base64Str := base64.StdEncoding.EncodeToString(signature)
 	return base64Str
+}
+
+func EddsaPublicKey(secret any, curve any) []uint8 {
+	var seed []uint8
+	switch value := secret.(type) {
+	case []uint8:
+		seed = value
+	case []any:
+		var err error
+		seed, err = interfacesToBytes(value)
+		if err != nil {
+			panic(err)
+		}
+	default:
+		panic(fmt.Sprintf("EddsaPublicKey: unsupported secret type %T", secret))
+	}
+	if len(seed) != ed25.SeedSize {
+		panic("Ed25519 secret must be 32 bytes")
+	}
+	privateKey := ed25.NewKeyFromSeed(seed)
+	return privateKey[ed25.SeedSize:]
+}
+
+func (this *BaseExchange) EddsaPublicKey(secret any, curve any) any {
+	return EddsaPublicKey(secret, curve)
+}
+
+func EddsaPointIsValid(point any, curve any) bool {
+	var encoded []uint8
+	switch value := point.(type) {
+	case []uint8:
+		encoded = value
+	case []any:
+		encoded, _ = interfacesToBytes(value)
+	}
+	if len(encoded) != 32 {
+		return false
+	}
+	// Solana accepts ZIP-215 encodings: reduce y modulo p and accept either sign for x = 0.
+	reversed := make([]byte, 32)
+	for i := range encoded {
+		reversed[31-i] = encoded[i]
+	}
+	reversed[0] &= 127
+	p := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 255), big.NewInt(19))
+	y := new(big.Int).Mod(new(big.Int).SetBytes(reversed), p)
+	y2 := new(big.Int).Mod(new(big.Int).Mul(y, y), p)
+	d, _ := new(big.Int).SetString("37095705934669439343138083508754565189542113879843219016388785533085940283555", 10)
+	v := new(big.Int).Add(new(big.Int).Mul(d, y2), big.NewInt(1))
+	x2 := new(big.Int).Mod(new(big.Int).Mul(new(big.Int).Sub(y2, big.NewInt(1)), new(big.Int).Exp(v, new(big.Int).Sub(p, big.NewInt(2)), p)), p)
+	legendre := new(big.Int).Exp(x2, new(big.Int).Rsh(new(big.Int).Sub(p, big.NewInt(1)), 1), p)
+	return x2.Sign() == 0 || legendre.Cmp(big.NewInt(1)) == 0
+}
+
+func (this *BaseExchange) EddsaPointIsValid(point any, curve any) any {
+	return EddsaPointIsValid(point, curve)
 }
 
 // func Ecdsa(request any, secret any, alg any, hash any) string {
