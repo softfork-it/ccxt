@@ -581,6 +581,14 @@ public class Exchange {
         return Crypto.Eddsa(payload, secret, algo);
     }
 
+    public Object eddsaPublicKey(Object secret, Object algo) {
+        return Crypto.EddsaPublicKey(secret, algo);
+    }
+
+    public Object eddsaPointIsValid(Object point, Object algo) {
+        return Crypto.EddsaPointIsValid(point, algo);
+    }
+
     public String jwt(Object data, Object secret, Object hash, boolean isRsa, Object options2) {
         return Crypto.Jwt(data, secret, hash, isRsa, (Map<String, Object>)options2);
     }

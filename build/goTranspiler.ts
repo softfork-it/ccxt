@@ -2298,12 +2298,14 @@ func (this *${className}) Init(userConfig map[string]any) {
         const go = this.transpiler.transpileGoByPath(jsFile);
         let content = go.content;
         content = this.regexAll (content, [
-            [ /Newccxt.Exchange.+\n.+\n.+/gm, 'ccxt.Exchange{}' ],
+            [ /(\w+) := NewExchange\(\)/gm, '$1 := ccxt.NewExchange().(*ccxt.Exchange)' ],
+            [ /\bed25519\b/g, '"ed25519"' ],
             [ /func Equals\(.+\n.*\n.*\n.*}/gm, '' ], // remove equals
         ]).trim ();
 
         const file = [
             'package base',
+            'import ccxt "github.com/ccxt/ccxt/go/v4"',
             this.createGeneratedHeader().join('\n'),
             content,
         ].join('\n');

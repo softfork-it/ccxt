@@ -113,6 +113,27 @@ function eddsa (request: Hex, secret: Input, curve: CurveFnEDDSA) {
     return base64.encode (signature)
 }
 
+function eddsaPublicKey (secret: Input, curve: CurveFnEDDSA) {
+    if (secret.length !== 32) {
+        throw new Error ('Ed25519 secret must be 32 bytes');
+    }
+    return curve.getPublicKey (secret);
+}
+
+function eddsaPointIsValid (point: Uint8Array, curve: CurveFnEDDSA) {
+    if (point.length !== 32) {
+        return false;
+    }
+    try {
+        // Non-strict ZIP-215 decoding matches curve25519-dalek/Solana.
+        // @ts-ignore
+        curve.ExtendedPoint.fromHex (point, false);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 /*  ------------------------------------------------------------------------ */
 
 // source: https://stackoverflow.com/a/18639975/1067003
@@ -144,6 +165,8 @@ export {
     crc32,
     ecdsa,
     eddsa,
+    eddsaPublicKey,
+    eddsaPointIsValid,
     axolotl,
 };
 

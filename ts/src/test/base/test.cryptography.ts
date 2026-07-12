@@ -3,6 +3,7 @@
 import assert from 'assert';
 import { sha256 } from '../../static_dependencies/noble-hashes/sha256.js';
 import { sha1 } from '../../static_dependencies/noble-hashes/sha1.js';
+import { sha384, sha512 } from '../../static_dependencies/noble-hashes/sha512.js';
 import { md5 } from '../../static_dependencies/noble-hashes/md5.js';
 import { ecdsa, crc32, eddsa,  hash, hmac  } from '../../base/functions/crypto.js';
 import { encode } from '../../base/functions/encode.js';
@@ -26,7 +27,7 @@ function equals (a, b) {
 
 function testCryptography () {
 
-    // const exchange = new Exchange ();
+    const exchange = new Exchange ();
 
     // ---------------------------------------------------------------------------------------------------------------------
 
@@ -45,6 +46,25 @@ function testCryptography () {
 
 
     const privateKey = '1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a';
+
+    const eddsaSeed = exchange.base16ToBinary ('53044db873cead13a10478acd042f15541f041d90dc3d90223c30da52ced2522');
+    const binaryMessage = exchange.base16ToBinary ('000102ff');
+    assert (hash (binaryMessage, md5, 'hex') === '0416dab819887333af831f8c765ac2ae');
+    assert (hash (binaryMessage, sha1, 'hex') === 'c62c27924f4c967f5eddb1850c091d54c7a2ab58');
+    assert (hash (binaryMessage, sha256, 'hex') === '3d1f57c984978ef98a18378c8166c1cb8ede02c03eeb6aee7e2f121dfeee3e56');
+    assert (hash (binaryMessage, sha384, 'hex') === '4adde433f1a47bd68b143626b9951a89217af7a8f21b2a636885bc2a170668fbc28f3606845e231d81e8a0422d1c8c2a');
+    assert (hash (binaryMessage, sha512, 'hex') === '05fa024a59c6b7005c7cb0fc77e1eba000b8e157d04b6d312ed09dafab51adcd0a52f5f6d9709e925f3e880d1a5424506ddf634e839931302d03a9abebe6ec63');
+    assert (eddsa (binaryMessage, eddsaSeed, ed25519) === 'U+3949h+LPUUM3L+SbYXmZ2VBtohs+Z8HvjuIFGwWS07fHttd9jmzkl0WUX7lGdoCc+K0oQskQoD0Gwe/7mZBQ==');
+    assert (exchange.binaryToBase16 (exchange.eddsaPublicKey (eddsaSeed, ed25519)) === '08cde2c193eb2fd652d5ccceb8347e4b246df2f6cf412df506c3c51a14b997f7');
+    assert (exchange.eddsaPointIsValid (exchange.base16ToBinary ('5866666666666666666666666666666666666666666666666666666666666666'), ed25519));
+    assert (exchange.eddsaPointIsValid (exchange.base16ToBinary ('0100000000000000000000000000000000000000000000000000000000000000'), ed25519));
+    assert (exchange.eddsaPointIsValid (exchange.base16ToBinary ('0100000000000000000000000000000000000000000000000000000000000080'), ed25519));
+    assert (exchange.eddsaPointIsValid (exchange.base16ToBinary ('edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'), ed25519));
+    assert (!exchange.eddsaPointIsValid (exchange.base16ToBinary ('dc1a9fa1f50923c39ba07cac584f39edadac97f4c2f9da07f361be6d63f9c79a'), ed25519));
+    assert (!exchange.eddsaPointIsValid (exchange.base16ToBinary ('f6c94dcd7ed588518da78b58ead7dafbe2b2835e7af84f47a4eefb24b705f102'), ed25519));
+    assert (exchange.eddsaPointIsValid (exchange.base16ToBinary ('544e9e41211a6c230b638598b26fdb7874bd5390ee16c59d0b304f61f37256e3'), ed25519));
+    assert (exchange.eddsaPointIsValid (exchange.base16ToBinary ('9347d96440a488e810b172703a565ce7f4445b7a07dee886188dd030e06b4683'), ed25519));
+    assert (!exchange.eddsaPointIsValid (exchange.base16ToBinary ('00000000000000000000000000000000000000000000000000000000000000'), ed25519));
 
 
     assert (equals (ecdsa ('1a', privateKey, secp256k1, sha256), {

@@ -212,6 +212,10 @@ public class BaseTest {
         return Crypto.hash(request, algorithm, null);
     }
 
+    public static Object eddsa(Object request, Object secret, Object algorithm) {
+        return Crypto.Eddsa(request, secret, algorithm);
+    }
+
     public static String hmac(
         Object request,
         Object secret,

@@ -2598,6 +2598,7 @@ class NewTranspiler {
         const file = [
             'package tests.base;',
             'import tests.BaseTest;',
+            'import io.github.ccxt.Exchange;',
             'import io.github.ccxt.Helpers;',
             '',
             this.createGeneratedHeader().join('\n'),

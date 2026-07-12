@@ -192,6 +192,10 @@ func Hmac(request2 any, secret2 any, algorithm2 func() string, digest string) an
 	return ccxt.Hmac(request2, secret2, algorithm2, digest)
 }
 
+func Eddsa(request2 any, secret2 any, algorithm2 any) any {
+	return ccxt.Eddsa(request2, secret2, algorithm2)
+}
+
 func sha256() string {
 	return "sha256"
 }
@@ -202,6 +206,14 @@ func md5() string {
 
 func sha1() string {
 	return "sha1"
+}
+
+func sha384() string {
+	return "sha384"
+}
+
+func sha512() string {
+	return "sha512"
 }
 
 func secp256k1() string {

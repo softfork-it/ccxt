@@ -43,7 +43,7 @@ from cryptography.hazmat import backends
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, ed25519
 # from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
-from cryptography.hazmat.primitives.serialization import load_pem_private_key
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, load_pem_private_key
 
 # -----------------------------------------------------------------------------
 
@@ -1758,6 +1758,25 @@ class Exchange(object):
             return Exchange.binary_to_urlencoded_base64(signature)
 
         return Exchange.binary_to_base64(signature)
+
+    @staticmethod
+    def eddsa_public_key(secret, curve='ed25519'):
+        if len(secret) != 32:
+            raise ValueError('Ed25519 secret must be 32 bytes')
+        private_key = ed25519.Ed25519PrivateKey.from_private_bytes(secret)
+        return private_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+
+    @staticmethod
+    def eddsa_point_is_valid(point, curve='ed25519'):
+        if len(point) != 32:
+            return False
+        # Solana uses ZIP-215 decoding: reduce y modulo p and accept either sign for x = 0.
+        p = 2 ** 255 - 19
+        y = (int.from_bytes(point, 'little') & (2 ** 255 - 1)) % p
+        y2 = y * y % p
+        d = 37095705934669439343138083508754565189542113879843219016388785533085940283555
+        x2 = (y2 - 1) * pow(d * y2 + 1, p - 2, p) % p
+        return x2 == 0 or pow(x2, (p - 1) // 2, p) == 1
 
     @staticmethod
     def axolotl(request, secret, curve='ed25519'):

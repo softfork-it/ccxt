@@ -1,5 +1,6 @@
 using System.Text;
 using System.Security.Cryptography;
+using System.Numerics;
 using System.IO.Compression;
 using Cryptography.ECDSA;
 using Nethereum.Util;
@@ -82,7 +83,7 @@ public partial class Exchange
 
     public static object Hash(object request2, Delegate hash = null, object digest2 = null)
     {
-        var request = request2 as String;
+        var request = request2 is byte[] bytes ? bytes : Encoding.UTF8.GetBytes(request2 as String);
         var algorithm = hash.DynamicInvoke() as string;
         digest2 ??= "hex";
         var digest = digest2 as String;
@@ -105,7 +106,7 @@ public partial class Exchange
                 signature = SignMD5(request);
                 break;
             case "keccak":
-                signature = SignKeccak(request2);
+                signature = SignKeccak(request);
                 break;
             case "sha3":
                 signature = SignKeccak(request);
@@ -120,7 +121,7 @@ public partial class Exchange
 
     private static byte[] HashBytes(object request2, Delegate hash = null)
     {
-        var request = request2 as String;
+        var request = request2 is byte[] bytes ? bytes : Encoding.UTF8.GetBytes(request2 as String);
         var algorithm = hash.DynamicInvoke() as string;
         var signature = new Byte[] { };
         switch (algorithm)
@@ -203,16 +204,24 @@ public partial class Exchange
 
     public static byte[] SignSHA256(string data)
     {
+        return SignSHA256(Encoding.UTF8.GetBytes(data));
+    }
+
+    public static byte[] SignSHA256(byte[] data)
+    {
         using var encryptor = SHA256.Create();
-        var resultBytes = encryptor.ComputeHash(Encoding.UTF8.GetBytes(data));
-        return resultBytes;
+        return encryptor.ComputeHash(data);
     }
 
     public static byte[] SignSHA1(string data)
     {
+        return SignSHA1(Encoding.UTF8.GetBytes(data));
+    }
+
+    public static byte[] SignSHA1(byte[] data)
+    {
         using var encryptor = SHA1.Create();
-        var resultBytes = encryptor.ComputeHash(Encoding.UTF8.GetBytes(data));
-        return resultBytes;
+        return encryptor.ComputeHash(data);
     }
 
     public static byte[] SignKeccak(object data2)
@@ -233,23 +242,35 @@ public partial class Exchange
 
     public static byte[] SignSHA384(string data)
     {
+        return SignSHA384(Encoding.UTF8.GetBytes(data));
+    }
+
+    public static byte[] SignSHA384(byte[] data)
+    {
         using var encryptor = SHA384.Create();
-        var resultBytes = encryptor.ComputeHash(Encoding.UTF8.GetBytes(data));
-        return resultBytes;
+        return encryptor.ComputeHash(data);
     }
 
     public static byte[] SignSHA512(string data)
     {
+        return SignSHA512(Encoding.UTF8.GetBytes(data));
+    }
+
+    public static byte[] SignSHA512(byte[] data)
+    {
         using var encryptor = SHA512.Create();
-        var resultBytes = encryptor.ComputeHash(Encoding.UTF8.GetBytes(data));
-        return resultBytes;
+        return encryptor.ComputeHash(data);
     }
 
     public static byte[] SignMD5(string data)
     {
+        return SignMD5(Encoding.UTF8.GetBytes(data));
+    }
+
+    public static byte[] SignMD5(byte[] data)
+    {
         using var encryptor = MD5.Create();
-        var resultBytes = encryptor.ComputeHash(Encoding.UTF8.GetBytes(data));
-        return resultBytes;
+        return encryptor.ComputeHash(data);
     }
 
     public static byte[] SignHMACSHA256(string data, byte[] secret)
@@ -483,6 +504,42 @@ public partial class Exchange
         byte[] signature = signer.GenerateSignature();
         var base64Sig = Convert.ToBase64String(signature);
         return base64Sig;
+    }
+
+    public object eddsaPublicKey(object secret, object alg = null) => EddsaPublicKey(secret, alg);
+
+    public static object EddsaPublicKey(object secret, object alg = null)
+    {
+        var seed = secret as byte[];
+        if (seed == null || seed.Length != 32)
+        {
+            throw new ArgumentException("Ed25519 secret must be 32 bytes");
+        }
+        return new Ed25519PrivateKeyParameters(seed, 0).GeneratePublicKey().GetEncoded();
+    }
+
+    public object eddsaPointIsValid(object point, object alg = null) => EddsaPointIsValid(point, alg);
+
+    public static bool EddsaPointIsValid(object point, object alg = null)
+    {
+        var encoded = point as byte[];
+        if (encoded == null || encoded.Length != 32)
+        {
+            return false;
+        }
+        // Solana uses ZIP-215 decoding: reduce y modulo p and accept either sign for x = 0.
+        encoded = (byte[])encoded.Clone();
+        encoded[31] &= 127;
+        var p = (BigInteger.One << 255) - 19;
+        var y = new BigInteger(encoded) % p;
+        var y2 = y * y % p;
+        var d = BigInteger.Parse("37095705934669439343138083508754565189542113879843219016388785533085940283555");
+        var x2 = (y2 - 1) * BigInteger.ModPow(d * y2 + 1, p - 2, p) % p;
+        if (x2 < 0)
+        {
+            x2 += p;
+        }
+        return x2.IsZero || BigInteger.ModPow(x2, (p - 1) / 2, p).IsOne;
     }
 
     public Int64 crc32(object str, object signed2 = null) => Crc32(str, signed2);

@@ -1392,6 +1392,29 @@ class Exchange {
         return static::binary_to_base64(static::base16_to_binary($signature->toHex()));
     }
 
+    public static function eddsa_public_key($secret, $algorithm = 'ed25519') {
+        if (strlen($secret) !== 32) {
+            throw new Exception('Ed25519 secret must be 32 bytes');
+        }
+        $curve = new EdDSA($algorithm);
+        $public_key_hex = $curve->keyFromSecret(bin2hex($secret))->getPublic('hex');
+        return hex2bin($public_key_hex);
+    }
+
+    public static function eddsa_point_is_valid($point, $algorithm = 'ed25519') {
+        if (strlen($point) !== 32) {
+            return false;
+        }
+        // Solana uses ZIP-215 decoding: reduce y modulo p and accept either sign for x = 0.
+        $point[31] = chr(ord($point[31]) & 127);
+        $p = gmp_sub(gmp_pow(2, 255), 19);
+        $y = gmp_mod(gmp_import($point, 1, GMP_LSW_FIRST | GMP_LITTLE_ENDIAN), $p);
+        $y2 = gmp_mod(gmp_mul($y, $y), $p);
+        $d = gmp_init('37095705934669439343138083508754565189542113879843219016388785533085940283555');
+        $x2 = gmp_mod(gmp_mul(gmp_sub($y2, 1), gmp_invert(gmp_add(gmp_mul($d, $y2), 1), $p)), $p);
+        return gmp_cmp($x2, 0) === 0 || gmp_cmp(gmp_powm($x2, gmp_div_q(gmp_sub($p, 1), 2), $p), 1) === 0;
+    }
+
     public static function random_bytes($length) {
         return bin2hex(random_bytes($length));
     }
