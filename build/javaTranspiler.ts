@@ -2676,6 +2676,7 @@ class NewTranspiler {
         };
 
         let baseFunctionTests = fs.readdirSync(baseFolders.ts).filter(filename => filename.endsWith('.ts')).map(filename => filename.replace('.ts', ''));
+        baseFunctionTests.sort((a, b) => Number(a === 'tests.init') - Number(b === 'tests.init'));
 
         for (const testName of baseFunctionTests) {
             const tsFile = baseFolders.ts + testName + '.ts';
@@ -2700,6 +2701,7 @@ class NewTranspiler {
                 [/\s*public\sObject\sequals(([^}]|\n)+)+}/gm, ''], // remove equals
                 [/testSharedMethods.AssertDeepEqual/gm, 'AssertDeepEqual'], // deepEqual added
             ]).trim()
+            content = content.replace(/new ccxt\.([a-z]\w*)/gm, (_, exchangeId) => `new io.github.ccxt.exchanges.${this.capitalize(exchangeId)}`);
             // cast callDynamically to CompletableFuture when .join() is called on the result
             content = content.replace(/\(Helpers\.callDynamically\(([^)]+(?:\([^)]*\))*[^)]*)\)\)\.join\(\)/g, '((java.util.concurrent.CompletableFuture<Object>)Helpers.callDynamically($1)).join()');
             // Null-safe Array.isArray (see Helpers.isArrayJs comment).
@@ -2708,7 +2710,14 @@ class NewTranspiler {
             if (correctedTestName === 'TestInit') {
                 content = this.regexAll(content, [
                     [/(test(\w+))\(\)/gm, '(new Test$2()).$1()'],
-                ])
+                    [/\(\(new TestLanguageSpecific\(\)\)\.testLanguageSpecific\(\)\)\.join\(\)/gm, '(new TestLanguageSpecific()).testLanguageSpecific()'],
+                ]);
+                // Keep committed Java tests too; most are not emitted in this pass.
+                content = content.split('\n').filter(line => {
+                    const match = line.match(/new (Test\w+)\(\)/);
+                    return match === null || fs.existsSync(`${outDir}/${match[1]}.java`);
+                }).join('\n');
+                content = content.replace(/\}\);(\s*\n\s*\}\s*)$/, '}, io.github.ccxt.Exchange.VIRTUAL_EXECUTOR);$1');
             } else if (correctedTestName === 'TestSafeMethods') {
                 // we don't support wS structs yet
 

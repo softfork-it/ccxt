@@ -1,4 +1,4 @@
-
+// AUTO_TRANSPILE_ENABLED
 
 import testAggregate from './test.aggregate.js';
 import testDecimalToPrecision from './test.decimalToPrecision.js';
