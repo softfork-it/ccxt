@@ -5038,6 +5038,7 @@ class NewTranspiler {
                 [/\s*public\sObject\sequals(([^}]|\n)+)+}/gm, ''], // remove equals
                 [/testSharedMethods.AssertDeepEqual/gm, 'AssertDeepEqual'], // deepEqual added
             ]).trim()
+            content = content.replace(/new ccxt\.([a-z]\w*)/gm, (_, exchangeId) => `new io.github.ccxt.exchanges.${this.capitalize(exchangeId)}`);
         // cast callDynamically to CompletableFuture when .join() is called on the result
         content = content.replace(/\(Helpers\.callDynamically\(([^)]+(?:\([^)]*\))*[^)]*)\)\)\.join\(\)/g, '((java.util.concurrent.CompletableFuture<Object>)Helpers.callDynamically($1)).join()');
         // Strip parens around a method callee, e.g. `(this.handleSubTypeAndParams)(args)`.
