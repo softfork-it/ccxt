@@ -3407,7 +3407,7 @@ public class Exchange {
 
     public Object binaryToBase58(Object buff2) {
         byte[] buff = (byte[])buff2;
-        return Crypto.binaryToHex(buff);
+        return Encode.binaryToBase58(buff);
     }
 
     public Object toFixed(Object number, Object decimals) {

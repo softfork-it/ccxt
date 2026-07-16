@@ -55,6 +55,7 @@ function testCryptography () {
     assert (hash (binaryMessage, sha384, 'hex') === '4adde433f1a47bd68b143626b9951a89217af7a8f21b2a636885bc2a170668fbc28f3606845e231d81e8a0422d1c8c2a');
     assert (hash (binaryMessage, sha512, 'hex') === '05fa024a59c6b7005c7cb0fc77e1eba000b8e157d04b6d312ed09dafab51adcd0a52f5f6d9709e925f3e880d1a5424506ddf634e839931302d03a9abebe6ec63');
     assert (eddsa (binaryMessage, eddsaSeed, ed25519) === 'U+3949h+LPUUM3L+SbYXmZ2VBtohs+Z8HvjuIFGwWS07fHttd9jmzkl0WUX7lGdoCc+K0oQskQoD0Gwe/7mZBQ==');
+    assert (exchange.binaryToBase58 (exchange.base64ToBinary (exchange.stringToBase64 ('hello'))) === 'Cn8eVZg');
     assert (exchange.binaryToBase16 (exchange.eddsaPublicKey (eddsaSeed, ed25519)) === '08cde2c193eb2fd652d5ccceb8347e4b246df2f6cf412df506c3c51a14b997f7');
     assert (exchange.eddsaPointIsValid (exchange.base16ToBinary ('5866666666666666666666666666666666666666666666666666666666666666'), ed25519));
     assert (exchange.eddsaPointIsValid (exchange.base16ToBinary ('0100000000000000000000000000000000000000000000000000000000000000'), ed25519));

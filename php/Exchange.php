@@ -2541,7 +2541,8 @@ class Exchange {
             $result->imul($base);
             $result->iadd(self::$base58_decoder[$s[$i]]);
         }
-        return static::number_to_be($result, 0);
+        $leadingZeros = str_repeat("\0", strspn($s, '1'));
+        return $result->isZero() ? $leadingZeros : $leadingZeros . static::number_to_be($result, 0);
     }
 
     public static function binary_to_base58($b) {
@@ -2567,7 +2568,8 @@ class Exchange {
             $result->idivn(58);
             $string[] = self::$base58_encoder[$next_character];
         }
-        return implode('', array_reverse($string));
+        $leadingZeros = str_repeat('1', strspn($b, "\0"));
+        return $leadingZeros . implode('', array_reverse($string));
     }
 
     public function remove0x_prefix($string) {

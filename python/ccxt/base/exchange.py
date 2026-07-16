@@ -2012,7 +2012,8 @@ class Exchange(object):
         for i in range(len(s)):
             result *= 58
             result += Exchange.base58_decoder[s[i]]
-        return result.to_bytes((result.bit_length() + 7) // 8, 'big')
+        leading_zeros = len(s) - len(s.lstrip('1'))
+        return (b'\0' * leading_zeros) + result.to_bytes((result.bit_length() + 7) // 8, 'big')
 
     @staticmethod
     def binary_to_base58(b):
@@ -2032,7 +2033,8 @@ class Exchange(object):
             result, next_character = divmod(result, 58)
             string.append(Exchange.base58_encoder[next_character])
         string.reverse()
-        return ''.join(string)
+        leading_zeros = len(b) - len(b.lstrip(b'\0'))
+        return ('1' * leading_zeros) + ''.join(string)
 
     def parse_number(self, value, default=None):
         if value is None:
