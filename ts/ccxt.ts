@@ -106,6 +106,7 @@ import digifinex from  './src/digifinex.js'
 import dydx from  './src/dydx.js'
 import exmo from  './src/exmo.js'
 import extended from  './src/extended.js'
+import fibe from  './src/fibe.js'
 import fmfwio from  './src/fmfwio.js'
 import foxbit from  './src/foxbit.js'
 import gate from  './src/gate.js'
@@ -297,6 +298,7 @@ const exchanges = {
     'dydx':                   dydx,
     'exmo':                   exmo,
     'extended':               extended,
+    'fibe':                   fibe,
     'fmfwio':                 fmfwio,
     'foxbit':                 foxbit,
     'gate':                   gate,
@@ -631,6 +633,7 @@ export {
     dydx,
     exmo,
     extended,
+    fibe,
     fmfwio,
     foxbit,
     gate,
