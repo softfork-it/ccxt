@@ -1,0 +1,52 @@
+{
+    "SOL": {
+        "info": null,
+        "id": "So11111111111111111111111111111111111111112",
+        "numericId": null,
+        "code": "SOL",
+        "precision": 0.0001,
+        "type": null,
+        "name": null,
+        "active": null,
+        "deposit": null,
+        "withdraw": null,
+        "fee": null,
+        "fees": {},
+        "networks": {},
+        "limits": {
+            "deposit": {
+                "min": null,
+                "max": null
+            },
+            "withdraw": {
+                "min": null,
+                "max": null
+            }
+        }
+    },
+    "USDC": {
+        "info": null,
+        "id": "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov",
+        "numericId": null,
+        "code": "USDC",
+        "precision": 0.01,
+        "type": null,
+        "name": null,
+        "active": null,
+        "deposit": null,
+        "withdraw": null,
+        "fee": null,
+        "fees": {},
+        "networks": {},
+        "limits": {
+            "deposit": {
+                "min": null,
+                "max": null
+            },
+            "withdraw": {
+                "min": null,
+                "max": null
+            }
+        }
+    }
+}

@@ -1,0 +1,104 @@
+{
+    "exchange": "fibe",
+    "walletAddress": "wallet",
+    "skipKeys": [],
+    "methods": {
+        "fetchBalance": [
+            {
+                "description": "fetchBalance maps the wallet address",
+                "method": "fetchBalance",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/spot-state?user=wallet",
+                "input": []
+            }
+        ],
+        "fetchPositions": [
+            {
+                "description": "fetchPositions maps the wallet address",
+                "method": "fetchPositions",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state?user=wallet",
+                "input": []
+            }
+        ],
+        "fetchTicker": [
+            {
+                "description": "fetchTicker maps a spot symbol to its market index",
+                "method": "fetchTicker",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/spot-asset-ctx?mi=1",
+                "input": ["SOL/USDC"]
+            }
+        ],
+        "fetchFundingRate": [
+            {
+                "description": "fetchFundingRate maps a swap symbol to its market index",
+                "method": "fetchFundingRate",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx?mi=1",
+                "input": ["SOL/USDC:USDC"]
+            }
+        ],
+        "fetchOrderBook": [
+            {
+                "description": "fetchOrderBook maps symbol, market type, and price step",
+                "method": "fetchOrderBook",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/l2book?mi=1&mt=S&priceStep=0.5",
+                "input": ["SOL/USDC", 2, {"priceStep": "0.5"}]
+            }
+        ],
+        "fetchTrades": [
+            {
+                "description": "fetchTrades maps a spot symbol to market type and index",
+                "method": "fetchTrades",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/recent-market-trades?mi=1&mt=S",
+                "input": ["SOL/USDC"]
+            }
+        ],
+        "fetchMyTrades": [
+            {
+                "description": "fetchMyTrades maps the wallet, symbol, and time bounds",
+                "method": "fetchMyTrades",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/user-trades?user=wallet&mi=1&mt=S&startTime=1783763617&endTime=1783767217&limit=25",
+                "input": ["SOL/USDC", 1783763617000, 25, {"until": 1783767217000}]
+            }
+        ],
+        "fetchOHLCV": [
+            {
+                "description": "fetchOHLCV maps the market and fixed time range",
+                "method": "fetchOHLCV",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/candles?mi=1&mt=S&startTimestamp=1783763617&endTimestamp=1783763737&interval=1m",
+                "input": ["SOL/USDC", "1m", 1783763617000, 2, {"until": 1783763737000}]
+            }
+        ],
+        "fetchOrder": [
+            {
+                "description": "fetchOrder maps the full order identity",
+                "method": "fetchOrder",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/order?user=wallet&orderId=42&mi=1&mt=S&subAccountIndex=2",
+                "input": ["42", "SOL/USDC", {"subAccountIndex": 2}]
+            }
+        ],
+        "fetchOpenOrders": [
+            {
+                "description": "fetchOpenOrders scopes the query by symbol",
+                "method": "fetchOpenOrders",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/open-orders?user=wallet&mi=1&mt=S",
+                "input": ["SOL/USDC"]
+            }
+        ],
+        "fetchTradingFee": [
+            {
+                "description": "fetchTradingFee maps user, market type, and index",
+                "method": "fetchTradingFee",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/user-fees?user=wallet&mi=1&mt=S",
+                "input": ["SOL/USDC"]
+            }
+        ],
+        "fetchFundingHistory": [
+            {
+                "description": "fetchFundingHistory converts millisecond bounds to seconds",
+                "method": "fetchFundingHistory",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/user-funding-history?user=wallet&startTime=1783763617&endTime=1783767217",
+                "input": ["SOL/USDC:USDC", 1783763617000, 10, {"until": 1783767217000}]
+            }
+        ]
+    },
+    "outputType": "json"
+}

@@ -1334,6 +1334,13 @@
             }
         }
     },
+    "fibe": {
+        "skipMethods": {
+            "orderBook": {
+                "timestamp": "l2book does not provide an exchange timestamp"
+            }
+        }
+    },
     "fmfwio": {
         "skipMethods": {
             "fetchCurrencies": {
