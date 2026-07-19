@@ -2,10 +2,11 @@
 import assert from 'assert';
 import ccxt from '../../../ccxt.js';
 
-// Frozen from SDK/server parity checks; do not regenerate these vectors with CCXT helpers.
+// Account blobs are frozen from devnet; transaction bytes from SDK/server parity checks. Do not regenerate with CCXT helpers.
 function testFibeTransactionVectors () {
     const walletAddress = 'bNMBfVAEjgxhNruYTR2vSZ92UdVKP2pdZewEG7978Vt';
     const privateKeyHex = '53044db873cead13a10478acd042f15541f041d90dc3d90223c30da52ced2522';
+    const secretKeyHex = '53044db873cead13a10478acd042f15541f041d90dc3d90223c30da52ced252208cde2c193eb2fd652d5ccceb8347e4b246df2f6cf412df506c3c51a14b997f7';
     const blockhash = '9zp3GFAJpCL3LkizPusx3BFrxdnK47hYmZCypWvkKUT7';
     const tokenProgram = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
     const baseMint = '22HX2NvQeuid5EUenvRtZtSN4i4wtjqGwqAyN5RJ7zHw';
@@ -14,9 +15,12 @@ function testFibeTransactionVectors () {
     const perpMarket = '8MEW7FcjkaoagB3oy8JyP4xidgSZnb7yHgbWHDsC5zSW';
     const spotTickArray = '4fFJyphLe6tPCzEiVBxESwYSRBumJ4W76srcYs6Tj5Cn';
     const perpTickArray = 'FB6JhTAfMddLKqPhiUjcpfnmbfMJXTMST81CxmUTtMqn';
-    const spotOpenOrdersAccount = 'IwAAAAAAAAABAAAAAAAAAAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3AAABAAAAAAAAAAAAAQAAAAEAAAAAAAAACM3iwZPrL9ZS1czOuDR+SyRt8vbPQS31BsPFGhS5l/cVzVsHAAAAAAAAAAAAAAAA6EUAAAAAAAAAAAAAAAEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
-    const perpOpenOrdersAccount = 'RAAAAAAAAAABAAAAAAAAAAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3AgABAAAAAAAAAAAAAQAAAAEAAAAAAAAACM3iwZPrL9ZS1czOuDR+SyRt8vbPQS31BsPFGhS5l/cVrlENAAAAAAAAAAAAAAAA7UUAAAAAAAAAAAIDBQH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+    const spotOpenOrdersAccount = 'IwAAAAAAAAABAAAAAAAAAA3sSJhNNI3M6vn+4Uqhc7xF8Hfe0zNvXJ1RKsnsVyB0AAABAAAAAAAAAAAAAQAAABXNWwcAAAAAKKBbagAAAAAN7EiYTTSNzOr5/uFKoXO8RfB33tMzb1ydUSrJ7FcgdAAAAAABAgAA6EUAAAAAAAAAAAAAAAAAAMgAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
+    const perpOpenOrdersAccount = 'RAAAAAAAAAABAAAAAAAAABXmyHrvsvTNLRrPWlccvZ+mdB8UQ7KWk23FOM12+wujAAABAAAAAAAAAAAAAQAAABWuUQ0AAAAAc6BbagAAAAAV5sh677L0zS0az1pXHL2fpnQfFEOylpNtxTjNdvsLowAAAAABAgAA7UUAAAAAAAAAAAAAAAAAAMgAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
     const exchange = new ccxt.fibe ({});
+    assert (exchange.fibeNormalizeMarginMode ('createOrder', 'CROSS') === 'cross', 'Fibe margin mode normalization mismatch');
+    assert (exchange.encodeCreateOrderTimeInForce ('po', true) === 'ALO', 'Fibe time in force normalization mismatch');
+    assert (exchange.solanaParsePrivateKeyHex (secretKeyHex, walletAddress) === privateKeyHex, 'Fibe private key parsing mismatch');
     const ownerBaseTokenAccount = exchange.solanaGetAssociatedTokenAddress (baseMint, walletAddress, tokenProgram);
     const ownerQuoteTokenAccount = exchange.solanaGetAssociatedTokenAddress (quoteMint, walletAddress, tokenProgram);
 
