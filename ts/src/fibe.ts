@@ -1357,7 +1357,7 @@ export default class fibe extends Exchange {
             }
             let upperTimeInForce = undefined;
             if (timeInForce !== undefined) {
-                upperTimeInForce = this.numberToString (timeInForce).toUpperCase ();
+                upperTimeInForce = timeInForce.toUpperCase ();
             }
             if ((upperTimeInForce !== undefined) && (upperTimeInForce !== 'IOC')) {
                 throw new InvalidOrder (this.id + ' createOrder() market orders require timeInForce IOC');
@@ -1801,7 +1801,7 @@ export default class fibe extends Exchange {
     }
 
     fibeNormalizeMarginMode (method, marginMode) {
-        const normalized = this.numberToString (marginMode).toLowerCase ();
+        const normalized = marginMode.toLowerCase ();
         if ((normalized !== 'cross') && (normalized !== 'isolated')) {
             throw new InvalidOrder (this.id + ' ' + method + '() marginMode must be cross or isolated');
         }
@@ -2007,12 +2007,11 @@ export default class fibe extends Exchange {
         if (value === '') {
             return false;
         }
-        for (let i = 0; i < value.length; i++) {
-            const character = value[i];
-            const isDigit = (character >= '0') && (character <= '9');
-            const isLower = (character >= 'a') && (character <= 'f');
-            const isUpper = (character >= 'A') && (character <= 'F');
-            if (!isDigit && !isLower && !isUpper) {
+        const characters = this.stringToCharsArray (value);
+        const hexCharacters = this.stringToCharsArray (this.solanaHexAlphabet ());
+        for (let i = 0; i < characters.length; i++) {
+            const character = characters[i];
+            if (!this.inArray (character.toLowerCase (), hexCharacters)) {
                 return false;
             }
         }
@@ -2035,7 +2034,7 @@ export default class fibe extends Exchange {
         if (privateKey === undefined) {
             throw new ArgumentsRequired (this.id + ' requires a 64-byte Solana secret key');
         }
-        privateKey = this.numberToString (privateKey).trim ();
+        privateKey = privateKey.trim ();
         if (privateKey === '') {
             throw new ArgumentsRequired (this.id + ' requires a 64-byte Solana secret key');
         }
@@ -2944,9 +2943,8 @@ export default class fibe extends Exchange {
         const orderSize = (mt === 'S') ? 144 : 160;
         let offset = 64;
         for (let i = 0; i < orderCount; i++) {
-            const clientOrderId = this.solanaReadU64FromHex (hex, offset + 40);
-            const stateBit = this.solanaReadU8FromHex (hex, offset + 69);
-            if ((clientOrderId === orderId) && (stateBit === 1)) {
+            const clientOrderId = this.solanaReadU64FromHex (hex, offset);
+            if ((clientOrderId !== '0') && (clientOrderId === orderId)) {
                 return this.solanaReadU64FromHex (hex, offset + 56);
             }
             offset = this.sum (offset, orderSize);
@@ -3309,7 +3307,7 @@ export default class fibe extends Exchange {
         if (postOnly) {
             let upperTimeInForce = undefined;
             if (timeInForce !== undefined) {
-                upperTimeInForce = this.numberToString (timeInForce).toUpperCase ();
+                upperTimeInForce = timeInForce.toUpperCase ();
             }
             if ((upperTimeInForce !== undefined) && (upperTimeInForce !== 'PO') && (upperTimeInForce !== 'ALO')) {
                 throw new InvalidOrder (this.id + ' createOrder() postOnly cannot be combined with timeInForce ' + timeInForce);
@@ -3319,7 +3317,7 @@ export default class fibe extends Exchange {
         if (timeInForce === undefined) {
             return 'GTC';
         }
-        const upper = this.numberToString (timeInForce).toUpperCase ();
+        const upper = timeInForce.toUpperCase ();
         const timeInForces: Dict = {
             'GTC': 'GTC',
             'IOC': 'IOC',
