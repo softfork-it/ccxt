@@ -24,7 +24,7 @@ export default class fibe extends Exchange {
             'name': 'Fibe',
             'countries': [ ],
             'certified': false,
-            // 500ms (conservative) until API rate-limit weights are confirmed
+            // The API budget is 1200 weighted units/minute; standard endpoints cost 7 units.
             'rateLimit': 500,
             'version': 'v1',
             'dex': true,
@@ -145,7 +145,7 @@ export default class fibe extends Exchange {
                         'symbolRequired': false,
                     },
                     'fetchOHLCV': {
-                        'limit': undefined,
+                        'limit': 100,
                     },
                 },
                 'forPerps': {
@@ -198,7 +198,6 @@ export default class fibe extends Exchange {
                         'markets': 1,
                         'market': 1,
                         'all-mids': 1,
-                        'market-stats': 1,
                         'spot-asset-ctx': 1,
                         'perp-asset-ctx': 1,
                         'l2book': 1,
@@ -355,7 +354,7 @@ export default class fibe extends Exchange {
                 'price': pricePrecision,
             },
             'limits': {
-                'leverage': { 'min': undefined, 'max': undefined },
+                'leverage': { 'min': undefined, 'max': this.safeNumber (market, 'maxLeverage') },
                 'amount': { 'min': amountPrecision, 'max': undefined },
                 'price': { 'min': pricePrecision, 'max': undefined },
                 'cost': { 'min': undefined, 'max': undefined },
@@ -371,7 +370,7 @@ export default class fibe extends Exchange {
     /**
      * @method
      * @name fibe#fetchBalance
-     * @description query spot balances for a user
+     * @description query spot funds held by open orders for a user, free and total wallet balances are not exposed by this endpoint
      * @see https://fb-4b8448ac.alephium.org/api/v1/spot-state
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
@@ -603,9 +602,8 @@ export default class fibe extends Exchange {
         }
         market = this.safeMarket (marketId, market);
         const timestamp = this.safeTimestamp (income, 'time');
-        const info = this.omit (income, 'fundingRate');
         return {
-            'info': info,
+            'info': income,
             'symbol': market['symbol'],
             'code': this.safeString (market, 'settle', 'USDC'),
             'timestamp': timestamp,
@@ -618,7 +616,7 @@ export default class fibe extends Exchange {
     /**
      * @method
      * @name fibe#fetchTradingFees
-     * @description fetch the user trading fees for all loaded spot markets
+     * @description fetch the user trading fees for all loaded markets
      * @see https://fb-4b8448ac.alephium.org/api/v1/user-fees
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
@@ -639,7 +637,7 @@ export default class fibe extends Exchange {
     /**
      * @method
      * @name fibe#fetchTradingFee
-     * @description fetch the user trading fees for one spot market
+     * @description fetch the user trading fees for one market
      * @see https://fb-4b8448ac.alephium.org/api/v1/user-fees
      * @param {string} symbol unified market symbol
      * @param {object} [params] extra parameters specific to the exchange API endpoint
@@ -671,7 +669,7 @@ export default class fibe extends Exchange {
     /**
      * @method
      * @name fibe#fetchTicker
-     * @description fetches a price ticker, 24h volume, and 24h change for a market
+     * @description fetches a midpoint-based price ticker, 24h volume, and 24h change for a market
      * @see https://fb-4b8448ac.alephium.org/api/v1/spot-asset-ctx
      * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
      * @param {string} symbol unified symbol of the market to fetch the ticker for
@@ -860,20 +858,14 @@ export default class fibe extends Exchange {
      * @param {string} symbol unified market symbol
      * @param {int} [limit] the maximum number of order book levels to return per side (applied client-side)
      * @param {object} [params] extra parameters specific to the exchange API endpoint
-     * @param {string} [params.priceStep] price aggregation step (defaults to the market tick size)
+     * @param {int} [params.nSigFigs] price aggregation significant figures, valid values are 2, 3, 4, or 5
+     * @param {int} [params.mantissa] price aggregation mantissa, valid values are 1, 2, or 5 and require nSigFigs to be 5
      * @returns {object} an order book structure
      */
     async fetchOrderBook (symbol: string, limit: Int = undefined, params = {}): Promise<OrderBook> {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const info = market['info'];
-        let priceStep = undefined;
-        [ priceStep, params ] = this.handleOptionAndParams (params, 'fetchOrderBook', 'priceStep');
-        if (priceStep === undefined) {
-            // priceStep is in human price units; the server scales it by 10**quoteDecimals.
-            // the market tick (precision.price) is the finest valid step.
-            priceStep = this.numberToString (market['precision']['price']);
-        }
         let mt = 'P';
         if (market['spot']) {
             mt = 'S';
@@ -881,14 +873,14 @@ export default class fibe extends Exchange {
         const request: Dict = {
             'mi': this.safeString (info, 'mi'),
             'mt': mt,
-            'priceStep': priceStep,
         };
         const response = await this.publicGetL2book (this.extend (request, params));
         //
         //     {
         //         "mi": "1",
         //         "mt": "S",
-        //         "ps": "100000",
+        //         "nSigFigs": 5,
+        //         "mantissa": 2,
         //         "bids": [ { "px": "123.40", "sz": "15.2" }, ... ],
         //         "asks": [ { "px": "123.50", "sz": "10.5" }, ... ]
         //     }

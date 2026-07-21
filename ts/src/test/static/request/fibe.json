@@ -37,10 +37,10 @@
         ],
         "fetchOrderBook": [
             {
-                "description": "fetchOrderBook maps symbol, market type, and price step",
+                "description": "fetchOrderBook maps symbol, market type, and aggregation",
                 "method": "fetchOrderBook",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/l2book?mi=1&mt=S&priceStep=0.5",
-                "input": ["SOL/USDC", 2, {"priceStep": "0.5"}]
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/l2book?mi=1&mt=S&nSigFigs=5&mantissa=2",
+                "input": ["SOL/USDC", 2, {"nSigFigs": 5, "mantissa": 2}]
             }
         ],
         "fetchTrades": [
@@ -65,6 +65,12 @@
                 "method": "fetchOHLCV",
                 "url": "https://fb-4b8448ac.alephium.org/api/v1/candles?mi=1&mt=S&startTimestamp=1783763617&endTimestamp=1783763737&interval=1m",
                 "input": ["SOL/USDC", "1m", 1783763617000, 2, {"until": 1783763737000}]
+            },
+            {
+                "description": "fetchOHLCV defaults to a 100-candle range",
+                "method": "fetchOHLCV",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/candles?mi=1&mt=S&startTimestamp=1783763617&endTimestamp=1783769617&interval=1m",
+                "input": ["SOL/USDC", "1m", 1783763617000]
             }
         ],
         "fetchOrder": [
@@ -80,6 +86,30 @@
                 "description": "fetchOpenOrders scopes the query by symbol",
                 "method": "fetchOpenOrders",
                 "url": "https://fb-4b8448ac.alephium.org/api/v1/open-orders?user=wallet&mi=1&mt=S",
+                "input": ["SOL/USDC"]
+            }
+        ],
+        "fetchOrders": [
+            {
+                "description": "fetchOrders maps pagination to the historical order request",
+                "method": "fetchOrders",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?user=wallet&mi=1&mt=S&page=2&pageSize=1",
+                "input": ["SOL/USDC", null, 1, {"page": 2}]
+            }
+        ],
+        "fetchClosedOrders": [
+            {
+                "description": "fetchClosedOrders requests filled historical orders",
+                "method": "fetchClosedOrders",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?user=wallet&mi=1&mt=S&status=F",
+                "input": ["SOL/USDC"]
+            }
+        ],
+        "fetchCanceledOrders": [
+            {
+                "description": "fetchCanceledOrders requests canceled historical orders",
+                "method": "fetchCanceledOrders",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?user=wallet&mi=1&mt=S&status=C",
                 "input": ["SOL/USDC"]
             }
         ],
