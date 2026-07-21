@@ -300,6 +300,54 @@
                 }
             }
         ],
+        "fetchOpenInterest": [
+            {
+                "description": "fetchOpenInterest perp",
+                "method": "fetchOpenInterest",
+                "input": [
+                    "SOL/USDC:USDC"
+                ],
+                "httpResponse": {
+                    "midPx": "80",
+                    "bidPx": "79",
+                    "bidSz": "2",
+                    "askPx": "81",
+                    "askSz": "3",
+                    "midPx24hAgo": "100",
+                    "bv24h": "10",
+                    "qv24h": "800",
+                    "markPx": "80",
+                    "oraclePx": "81",
+                    "funding": "0.0001",
+                    "premium": "0.0002",
+                    "openInterest": "20"
+                },
+                "parsedResponse": {
+                    "symbol": "SOL/USDC:USDC",
+                    "openInterestAmount": 20,
+                    "openInterestValue": 1600,
+                    "timestamp": null,
+                    "datetime": null,
+                    "info": {
+                        "midPx": "80",
+                        "bidPx": "79",
+                        "bidSz": "2",
+                        "askPx": "81",
+                        "askSz": "3",
+                        "midPx24hAgo": "100",
+                        "bv24h": "10",
+                        "qv24h": "800",
+                        "markPx": "80",
+                        "oraclePx": "81",
+                        "funding": "0.0001",
+                        "premium": "0.0002",
+                        "openInterest": "20"
+                    },
+                    "baseVolume": null,
+                    "quoteVolume": null
+                }
+            }
+        ],
         "fetchTrades": [
             {
                 "description": "fetchTrades spot",

@@ -51,6 +51,7 @@ export default class fibe extends Exchange {
                 'createStopOrder': false,
                 'editOrder': false,
                 'fetchBalance': true,
+                'fetchBidsAsks': 'emulated',
                 'fetchCanceledOrders': true,
                 'fetchClosedOrders': true,
                 'fetchCurrencies': false,
@@ -59,8 +60,10 @@ export default class fibe extends Exchange {
                 'fetchFundingRateHistory': false,
                 'fetchFundingRates': true,
                 'fetchMarkets': true,
+                'fetchMarkPrice': 'emulated',
                 'fetchMyTrades': true,
                 'fetchOHLCV': true,
+                'fetchOpenInterest': true,
                 'fetchOpenOrders': true,
                 'fetchOrder': true,
                 'fetchOrderBook': true,
@@ -731,6 +734,36 @@ export default class fibe extends Exchange {
         return result;
     }
 
+    /**
+     * @method
+     * @name fibe#fetchBidsAsks
+     * @description fetches the bid and ask price and volume for multiple markets
+     * @param {string[]|undefined} symbols unified symbols of the markets to fetch bids and asks for
+     * @param {object} [params] extra parameters specific to the exchange API endpoint
+     * @returns {object} a dictionary of [ticker structures]{@link https://docs.ccxt.com/#/?id=ticker-structure}
+     */
+    async fetchBidsAsks (symbols: Strings = undefined, params = {}): Promise<Tickers> {
+        return await this.fetchTickers (symbols, params);
+    }
+
+    /**
+     * @method
+     * @name fibe#fetchMarkPrice
+     * @description fetches the current mark price for a perpetual market
+     * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
+     * @param {string} symbol unified symbol of the market
+     * @param {object} [params] extra parameters specific to the exchange API endpoint
+     * @returns {object} a [ticker structure]{@link https://docs.ccxt.com/#/?id=ticker-structure}
+     */
+    async fetchMarkPrice (symbol: string, params = {}): Promise<Ticker> {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        if (!market['swap']) {
+            throw new ExchangeError (this.id + ' fetchMarkPrice() is only valid for swap markets');
+        }
+        return await this.fetchTicker (symbol, params);
+    }
+
     parseTicker (ticker: Dict, market: Market = undefined): Ticker {
         //
         //     {
@@ -777,6 +810,46 @@ export default class fibe extends Exchange {
             'info': ticker,
             'indexPrice': this.safeString (ticker, 'oraclePx'),
             'markPrice': this.safeString (ticker, 'markPx'),
+        }, market);
+    }
+
+    /**
+     * @method
+     * @name fibe#fetchOpenInterest
+     * @description retrieves the current open interest for a perpetual market
+     * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
+     * @param {string} symbol unified symbol of the market
+     * @param {object} [params] extra parameters specific to the exchange API endpoint
+     * @returns {object} an [open interest structure]{@link https://docs.ccxt.com/#/?id=open-interest-structure}
+     */
+    async fetchOpenInterest (symbol: string, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        if (!market['swap']) {
+            throw new ExchangeError (this.id + ' fetchOpenInterest() is only valid for swap markets');
+        }
+        const info = market['info'];
+        const request: Dict = {
+            'mi': this.safeString (info, 'mi'),
+        };
+        const response = await this.publicGetPerpAssetCtx (this.extend (request, params));
+        return this.parseOpenInterest (response, market);
+    }
+
+    parseOpenInterest (interest, market: Market = undefined) {
+        const openInterest = this.safeString (interest, 'openInterest');
+        const markPrice = this.safeString (interest, 'markPx');
+        let openInterestValue = undefined;
+        if ((openInterest !== undefined) && (markPrice !== undefined)) {
+            openInterestValue = Precise.stringMul (openInterest, markPrice);
+        }
+        return this.safeOpenInterest ({
+            'symbol': this.safeSymbol (undefined, market),
+            'openInterestAmount': openInterest,
+            'openInterestValue': openInterestValue,
+            'timestamp': undefined,
+            'datetime': undefined,
+            'info': interest,
         }, market);
     }
 
