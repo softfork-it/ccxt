@@ -35,6 +35,30 @@
                 "input": ["SOL/USDC"]
             }
         ],
+        "fetchBidsAsks": [
+            {
+                "description": "fetchBidsAsks reuses market ticker requests",
+                "method": "fetchBidsAsks",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/spot-asset-ctx?mi=1",
+                "input": [["SOL/USDC"]]
+            }
+        ],
+        "fetchMarkPrice": [
+            {
+                "description": "fetchMarkPrice requests a perpetual asset context",
+                "method": "fetchMarkPrice",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx?mi=1",
+                "input": ["SOL/USDC:USDC"]
+            }
+        ],
+        "fetchOpenInterest": [
+            {
+                "description": "fetchOpenInterest maps a perpetual symbol to its market index",
+                "method": "fetchOpenInterest",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx?mi=1",
+                "input": ["SOL/USDC:USDC"]
+            }
+        ],
         "fetchFundingRate": [
             {
                 "description": "fetchFundingRate maps a swap symbol to its market index",
