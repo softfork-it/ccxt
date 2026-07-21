@@ -19,6 +19,14 @@
                 "input": []
             }
         ],
+        "fetchPosition": [
+            {
+                "description": "fetchPosition filters positions by symbol",
+                "method": "fetchPosition",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state?user=wallet",
+                "input": ["SOL/USDC:USDC"]
+            }
+        ],
         "fetchTicker": [
             {
                 "description": "fetchTicker maps a spot symbol to its market index",
