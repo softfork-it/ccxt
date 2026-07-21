@@ -149,7 +149,7 @@
                         "limits": {
                             "leverage": {
                                 "min": null,
-                                "max": null
+                                "max": 100
                             },
                             "amount": {
                                 "min": 0.0001,
@@ -597,7 +597,8 @@
                 "httpResponse": {
                     "mi": "1",
                     "mt": "S",
-                    "ps": "0.5",
+                    "nSigFigs": 5,
+                    "mantissa": 2,
                     "bids": [
                         {
                             "px": "79",
@@ -649,16 +650,33 @@
                 "httpResponse": {
                     "userCrossRate": "0.001",
                     "userAddRate": "0.0005",
-                    "crossFeeSchedule": [
+                    "activeReferralDiscount": "0.00",
+                    "feeSchedule": {
+                        "volumeTiers": [
+                            "0",
+                            "1000000"
+                        ],
+                        "takerFeeRateTiers": [
+                            "0.001000",
+                            "0.000900"
+                        ],
+                        "makerFeeRateTiers": [
+                            "0.000500",
+                            "0.000400"
+                        ],
+                        "makerRebateRateTiers": [
+                            "0.000000",
+                            "0.000100"
+                        ],
+                        "referralDiscountPercentage": "0.00",
+                        "referralRewardPercentage": "0.00",
+                        "feeMode": "FeesOnQuote"
+                    },
+                    "dailyUserVlm": [
                         {
-                            "volume": "0",
-                            "rate": "0.001"
-                        }
-                    ],
-                    "addFeeSchedule": [
-                        {
-                            "volume": "0",
-                            "rate": "0.0005"
+                            "date": "2026-07-11",
+                            "userCross": "100",
+                            "userAdd": "50"
                         }
                     ]
                 },
@@ -666,16 +684,33 @@
                     "info": {
                         "userCrossRate": "0.001",
                         "userAddRate": "0.0005",
-                        "crossFeeSchedule": [
+                        "activeReferralDiscount": "0.00",
+                        "feeSchedule": {
+                            "volumeTiers": [
+                                "0",
+                                "1000000"
+                            ],
+                            "takerFeeRateTiers": [
+                                "0.001000",
+                                "0.000900"
+                            ],
+                            "makerFeeRateTiers": [
+                                "0.000500",
+                                "0.000400"
+                            ],
+                            "makerRebateRateTiers": [
+                                "0.000000",
+                                "0.000100"
+                            ],
+                            "referralDiscountPercentage": "0.00",
+                            "referralRewardPercentage": "0.00",
+                            "feeMode": "FeesOnQuote"
+                        },
+                        "dailyUserVlm": [
                             {
-                                "volume": "0",
-                                "rate": "0.001"
-                            }
-                        ],
-                        "addFeeSchedule": [
-                            {
-                                "volume": "0",
-                                "rate": "0.0005"
+                                "date": "2026-07-11",
+                                "userCross": "100",
+                                "userAdd": "50"
                             }
                         ]
                     },
@@ -746,7 +781,8 @@
                             "mi": "1",
                             "mt": "P",
                             "usdc": "2.3",
-                            "szi": "4.5"
+                            "szi": "4.5",
+                            "fundingRate": "0.0001"
                         },
                         "symbol": "SOL/USDC:USDC",
                         "code": "USDC",
@@ -948,6 +984,77 @@
                         "filled": 0.5,
                         "remaining": 0,
                         "status": "closed",
+                        "fee": null,
+                        "trades": [],
+                        "fees": [],
+                        "stopPrice": null,
+                        "takeProfitPrice": null,
+                        "stopLossPrice": null
+                    }
+                ]
+            }
+        ],
+        "fetchCanceledOrders": [
+            {
+                "description": "fetchCanceledOrders maps canceled status and timestamps",
+                "method": "fetchCanceledOrders",
+                "input": [
+                    "SOL/USDC"
+                ],
+                "httpResponse": [
+                    {
+                        "mi": "1",
+                        "mt": "S",
+                        "oid": "43",
+                        "type": "L",
+                        "timeInForce": "GTC",
+                        "px": "80",
+                        "side": "A",
+                        "origSz": "0.5",
+                        "sz": "0.5",
+                        "status": "C",
+                        "txId": "cancel-tx",
+                        "createdAt": 1783763617,
+                        "updatedAt": 1783763618
+                    }
+                ],
+                "parsedResponse": [
+                    {
+                        "info": {
+                            "mi": "1",
+                            "mt": "S",
+                            "oid": "43",
+                            "type": "L",
+                            "timeInForce": "GTC",
+                            "px": "80",
+                            "side": "A",
+                            "origSz": "0.5",
+                            "sz": "0.5",
+                            "status": "C",
+                            "txId": "cancel-tx",
+                            "createdAt": 1783763617,
+                            "updatedAt": 1783763618
+                        },
+                        "id": "43",
+                        "clientOrderId": null,
+                        "timestamp": 1783763617000,
+                        "datetime": "2026-07-11T09:53:37.000Z",
+                        "lastTradeTimestamp": null,
+                        "lastUpdateTimestamp": 1783763618000,
+                        "symbol": "SOL/USDC",
+                        "type": "limit",
+                        "timeInForce": "GTC",
+                        "postOnly": null,
+                        "reduceOnly": null,
+                        "side": "sell",
+                        "price": 80,
+                        "triggerPrice": null,
+                        "amount": 0.5,
+                        "cost": 0,
+                        "average": null,
+                        "filled": 0,
+                        "remaining": 0.5,
+                        "status": "canceled",
                         "fee": null,
                         "trades": [],
                         "fees": [],

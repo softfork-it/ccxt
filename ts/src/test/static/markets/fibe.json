@@ -108,7 +108,7 @@
         "limits": {
             "leverage": {
                 "min": null,
-                "max": null
+                "max": 100
             },
             "amount": {
                 "min": 0.0001,
