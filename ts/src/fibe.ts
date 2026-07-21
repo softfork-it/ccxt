@@ -66,7 +66,7 @@ export default class fibe extends Exchange {
                 'fetchOrderBook': true,
                 'fetchOrderBooks': false,
                 'fetchOrders': true,
-                'fetchPosition': false,
+                'fetchPosition': true,
                 'fetchPositions': true,
                 'fetchStatus': false,
                 'fetchTicker': true,
@@ -107,7 +107,7 @@ export default class fibe extends Exchange {
                     'createOrders': undefined,
                     'fetchMyTrades': {
                         'marginMode': false,
-                        'limit': undefined,
+                        'limit': 1000,
                         'daysBack': undefined,
                         'untilDays': undefined,
                         'symbolRequired': false,
@@ -145,7 +145,7 @@ export default class fibe extends Exchange {
                         'symbolRequired': false,
                     },
                     'fetchOHLCV': {
-                        'limit': 100,
+                        'limit': 5000,
                     },
                 },
                 'forPerps': {
@@ -466,6 +466,21 @@ export default class fibe extends Exchange {
             }
         }
         return this.filterByArrayPositions (result, 'symbol', symbols, false);
+    }
+
+    /**
+     * @method
+     * @name fibe#fetchPosition
+     * @description fetch an open perp position for a market
+     * @see https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state
+     * @param {string} symbol unified market symbol
+     * @param {object} [params] extra parameters specific to the exchange API endpoint
+     * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+     * @returns {object} a [position structure]{@link https://docs.ccxt.com/#/?id=position-structure}
+     */
+    async fetchPosition (symbol: string, params = {}): Promise<Position> {
+        const positions = await this.fetchPositions ([ symbol ], params);
+        return this.safeDict (positions, 0, {}) as Position;
     }
 
     parsePosition (position: Dict, market: Market = undefined): Position {
@@ -1069,7 +1084,7 @@ export default class fibe extends Exchange {
             'interval': this.safeString (this.timeframes, timeframe, timeframe),
         };
         const response = await this.publicGetCandles (this.extend (request, params));
-        return this.parseOHLCVs (response, market, timeframe, since, limit);
+        return this.parseOHLCVs (response, market, timeframe, since, requestLimit);
     }
 
     parseOHLCV (ohlcv, market: Market = undefined): OHLCV {
@@ -1179,7 +1194,7 @@ export default class fibe extends Exchange {
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
      * @param {string} [params.status] raw status filter, "F" for closed/filled orders or "C" for canceled orders
      * @param {int} [params.page] page number, default is 1
-     * @param {int} [params.pageSize] page size, defaults to limit when provided without a symbol
+     * @param {int} [params.pageSize] page size, defaults to limit when provided
      * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
     async fetchOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
