@@ -168,9 +168,6 @@ export default class fibe extends Exchange {
                     'inverse': undefined,
                 },
             },
-            'options': {
-                'rpcUrl': 'https://api.devnet.solana.com',
-            },
             'timeframes': {
                 '1m': '1m',
                 '3m': '3m',
@@ -186,6 +183,10 @@ export default class fibe extends Exchange {
                 '3d': '3d',
                 '1w': '1w',
                 '1M': '1M',
+            },
+            'options': {
+                'rpcUrl': 'https://api.devnet.solana.com',
+                'commitment': 'confirmed',
             },
             'urls': {
                 'logo': 'https://avatars.githubusercontent.com/u/222646239?v=4',
@@ -206,6 +207,7 @@ export default class fibe extends Exchange {
                         'l2book': 1,
                         'recent-market-trades': 1,
                         'candles': 1,
+                        'account-id': 1,
                         'order': 1,
                         'open-orders': 1,
                         'historical-orders': 1,
@@ -377,18 +379,21 @@ export default class fibe extends Exchange {
      * @see https://fb-4b8448ac.alephium.org/api/v1/spot-state
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+     * @param {string} [params.accountId] resolved account id, bypasses the account-id request
+     * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @returns {object} a [balance structure]{@link https://docs.ccxt.com/#/?id=balance-structure}
      */
     async fetchBalance (params = {}): Promise<Balances> {
-        let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('fetchBalance', params);
+        let accountId = undefined;
+        const accountIdResponse = await this.fibeAccountId ('fetchBalance', params);
+        [ accountId, params ] = accountIdResponse;
         const request: Dict = {
-            'user': userAddress,
+            'aid': accountId,
         };
         const response = await this.publicGetSpotState (this.extend (request, params));
         //
         //     {
-        //         "user": "11111111111111111111111111111111",
+        //         "aid": "42",
         //         "balances": [
         //             { "symbol": "USDC", "hold": "1.2", "entryNtl": "3.4" }
         //         ]
@@ -415,25 +420,27 @@ export default class fibe extends Exchange {
      * @param {string[]|undefined} symbols list of unified market symbols
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+     * @param {string} [params.accountId] resolved account id, bypasses the account-id request
+     * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @returns {object[]} a list of [position structures]{@link https://docs.ccxt.com/#/?id=position-structure}
      */
     async fetchPositions (symbols: Strings = undefined, params = {}): Promise<Position[]> {
-        let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('fetchPositions', params);
+        let accountId = undefined;
+        const accountIdResponse = await this.fibeAccountId ('fetchPositions', params);
+        [ accountId, params ] = accountIdResponse;
         await this.loadMarkets ();
         symbols = this.marketSymbols (symbols, 'swap');
         const request: Dict = {
-            'user': userAddress,
+            'aid': accountId,
         };
         const response = await this.publicGetAllClearinghouseState (this.extend (request, params));
         //
         //     {
-        //         "user": "11111111111111111111111111111111",
+        //         "aid": "42",
         //         "states": [
         //             {
-        //                 "user": "11111111111111111111111111111111",
-        //                 "subAccountIndex": 2,
-        //                 "quoteMint": "11111111111111111111111111111111",
+        //                 "aid": "42",
+        //                 "qti": 0,
         //                 "clearinghouseState": {
         //                     "assetPositions": [
         //                         {
@@ -461,9 +468,8 @@ export default class fibe extends Exchange {
             const positions = this.safeList (clearinghouseState, 'assetPositions', []);
             for (let j = 0; j < positions.length; j++) {
                 const position = this.extend ({
-                    'user': this.safeString (state, 'user'),
-                    'subAccountIndex': this.safeInteger (state, 'subAccountIndex'),
-                    'quoteMint': this.safeString (state, 'quoteMint'),
+                    'accountId': this.safeString (state, 'aid'),
+                    'quoteTokenIndex': this.safeValue (state, 'qti'),
                 }, positions[j]);
                 result.push (this.parsePosition (position));
             }
@@ -479,6 +485,8 @@ export default class fibe extends Exchange {
      * @param {string} symbol unified market symbol
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+     * @param {string} [params.accountId] resolved account id, bypasses the account-id request
+     * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @returns {object} a [position structure]{@link https://docs.ccxt.com/#/?id=position-structure}
      */
     async fetchPosition (symbol: string, params = {}): Promise<Position> {
@@ -489,9 +497,8 @@ export default class fibe extends Exchange {
     parsePosition (position: Dict, market: Market = undefined): Position {
         //
         //     {
-        //         "user": "11111111111111111111111111111111",
-        //         "subAccountIndex": 2,
-        //         "quoteMint": "11111111111111111111111111111111",
+        //         "accountId": "42",
+        //         "quoteTokenIndex": 0,
         //         "mi": "1",
         //         "entryPx": "1.2",
         //         "leverage": { "type": "cross", "value": 3 },
@@ -569,17 +576,19 @@ export default class fibe extends Exchange {
      * @param {int} [limit] the maximum number of funding history structures to retrieve
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+     * @param {string} [params.accountId] resolved account id, bypasses the account-id request
+     * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @param {int} [params.until] the latest time in ms to fetch funding history for
      * @returns {object[]} a list of [funding history structures]{@link https://docs.ccxt.com/#/?id=funding-history-structure}
      */
     async fetchFundingHistory (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<FundingHistory[]> {
         await this.loadMarkets ();
-        let market = undefined;
         if (symbol !== undefined) {
-            market = this.market (symbol);
+            symbol = this.market (symbol)['symbol'];
         }
-        let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('fetchFundingHistory', params);
+        let accountId = undefined;
+        const accountIdResponse = await this.fibeAccountId ('fetchFundingHistory', params);
+        [ accountId, params ] = accountIdResponse;
         let until: Int = undefined;
         [ until, params ] = this.handleOptionAndParams (params, 'fetchFundingHistory', 'until');
         let startTime = 0;
@@ -587,14 +596,15 @@ export default class fibe extends Exchange {
             startTime = this.parseToInt (since / 1000);
         }
         const request: Dict = {
-            'user': userAddress,
+            'aid': accountId,
             'startTime': startTime,
         };
         if (until !== undefined) {
             request['endTime'] = this.parseToInt (until / 1000);
         }
         const response = await this.publicGetUserFundingHistory (this.extend (request, params));
-        return this.parseIncomes (response, market, since, limit) as FundingHistory[];
+        const fundingHistory = this.parseIncomes (response);
+        return this.filterBySymbolSinceLimit (fundingHistory, symbol, since, limit) as FundingHistory[];
     }
 
     parseIncome (income, market: Market = undefined) {
@@ -647,7 +657,8 @@ export default class fibe extends Exchange {
         const result: Dict = {};
         for (let i = 0; i < this.symbols.length; i++) {
             const symbol = this.symbols[i];
-            result[symbol] = await this.fetchTradingFee (symbol, this.extend ({ 'user': userAddress }, params));
+            const fee = await this.fetchTradingFee (symbol, this.extend ({ 'user': userAddress }, params));
+            result[symbol] = fee;
         }
         return result;
     }
@@ -729,7 +740,8 @@ export default class fibe extends Exchange {
         const result = {};
         for (let i = 0; i < symbols.length; i++) {
             const symbol = symbols[i];
-            result[symbol] = await this.fetchTicker (symbol, params);
+            const ticker = await this.fetchTicker (symbol, params);
+            result[symbol] = ticker;
         }
         return result;
     }
@@ -1022,16 +1034,19 @@ export default class fibe extends Exchange {
      * @param {int} [limit] the maximum amount of trades to fetch
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+     * @param {string} [params.accountId] resolved account id, bypasses the account-id request
+     * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @param {int} [params.until] timestamp in ms of the latest trade to fetch
      * @returns {Trade[]} a list of [trade structures]{@link https://docs.ccxt.com/#/?id=trade-structure}
      */
     async fetchMyTrades (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
-        let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('fetchMyTrades', params);
+        let accountId = undefined;
+        const accountIdResponse = await this.fibeAccountId ('fetchMyTrades', params);
+        [ accountId, params ] = accountIdResponse;
         await this.loadMarkets ();
         let market = undefined;
         const request: Dict = {
-            'user': userAddress,
+            'aid': accountId,
         };
         if (symbol !== undefined) {
             market = this.market (symbol);
@@ -1093,6 +1108,21 @@ export default class fibe extends Exchange {
         const timestamp = this.safeTimestamp (trade, 'time');
         const side = this.parseSide (this.safeString (trade, 'side'));
         const takerOrMaker = this.safeString (trade, 'takerOrMaker');
+        const feeToken = this.safeString (trade, 'feeToken');
+        let feeCurrency = undefined;
+        if (feeToken === 'base') {
+            feeCurrency = market['base'];
+        } else if (feeToken === 'quote') {
+            feeCurrency = market['quote'];
+        }
+        const feeCost = this.safeString (trade, 'feeAmount');
+        let fee = undefined;
+        if ((feeCost !== undefined) || (feeCurrency !== undefined)) {
+            fee = {
+                'cost': feeCost,
+                'currency': feeCurrency,
+            };
+        }
         return this.safeTrade ({
             'info': trade,
             'id': undefined,
@@ -1100,13 +1130,13 @@ export default class fibe extends Exchange {
             'datetime': this.iso8601 (timestamp),
             'symbol': market['symbol'],
             'order': this.safeString (trade, 'oid'),
-            'type': undefined,
+            'type': this.parseOrderType (this.safeString (trade, 'type')),
             'side': side,
             'takerOrMaker': takerOrMaker,
             'price': this.safeString (trade, 'px'),
             'amount': this.safeString (trade, 'sz'),
-            'cost': undefined,
-            'fee': undefined,
+            'cost': this.safeString (trade, 'tradeValue'),
+            'fee': fee,
         }, market);
     }
 
@@ -1195,7 +1225,8 @@ export default class fibe extends Exchange {
      * @param {string} symbol unified market symbol of the order
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
-     * @param {int} [params.subAccountIndex] perp subaccount index, defaults to 0
+     * @param {string} [params.accountId] resolved account id, bypasses the account-id request
+     * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @returns {Order} an [order structure]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
     async fetchOrder (id: string, symbol: Str = undefined, params = {}): Promise<Order> {
@@ -1203,20 +1234,17 @@ export default class fibe extends Exchange {
             throw new ArgumentsRequired (this.id + ' fetchOrder() requires a symbol');
         }
         id = this.fibeValidateUnsignedIntegerParam ('fetchOrder', 'id', id);
-        let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('fetchOrder', params);
+        let accountId = undefined;
+        const accountIdResponse = await this.fibeAccountId ('fetchOrder', params);
+        [ accountId, params ] = accountIdResponse;
         await this.loadMarkets ();
         const market = this.market (symbol);
-        let subAccountIndex = undefined;
-        [ subAccountIndex, params ] = this.handleOptionAndParams (params, 'fetchOrder', 'subAccountIndex', 0);
-        subAccountIndex = this.fibeValidateU8Param ('fetchOrder', 'subAccountIndex', subAccountIndex);
         const info = market['info'];
         const request: Dict = {
-            'user': userAddress,
+            'aid': accountId,
             'orderId': id,
             'mi': this.safeString (info, 'mi'),
             'mt': this.safeString (info, 'mt', 'S'),
-            'subAccountIndex': subAccountIndex,
         };
         const response = await this.publicGetOrder (this.extend (request, params));
         return this.parseOrder (response, market);
@@ -1232,18 +1260,21 @@ export default class fibe extends Exchange {
      * @param {int} [limit] the maximum number of open orders structures to retrieve
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+     * @param {string} [params.accountId] resolved account id, bypasses the account-id request
+     * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
     async fetchOpenOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
-        let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('fetchOpenOrders', params);
+        let accountId = undefined;
+        const accountIdResponse = await this.fibeAccountId ('fetchOpenOrders', params);
+        [ accountId, params ] = accountIdResponse;
         await this.loadMarkets ();
         let market = undefined;
         if (symbol !== undefined) {
             market = this.market (symbol);
         }
         const request: Dict = {
-            'user': userAddress,
+            'aid': accountId,
         };
         if (market !== undefined) {
             const info = market['info'];
@@ -1265,14 +1296,17 @@ export default class fibe extends Exchange {
      * @param {int} [limit] the maximum number of order structures to retrieve
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
+     * @param {string} [params.accountId] resolved account id, bypasses the account-id request
+     * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @param {string} [params.status] raw status filter, "F" for closed/filled orders or "C" for canceled orders
      * @param {int} [params.page] page number, default is 1
      * @param {int} [params.pageSize] page size, defaults to limit when provided
      * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
     async fetchOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
-        let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('fetchOrders', params);
+        let accountId = undefined;
+        const accountIdResponse = await this.fibeAccountId ('fetchOrders', params);
+        [ accountId, params ] = accountIdResponse;
         await this.loadMarkets ();
         let market = undefined;
         if (symbol !== undefined) {
@@ -1284,7 +1318,7 @@ export default class fibe extends Exchange {
         const defaultPageSize = limit;
         [ pageSize, params ] = this.handleOptionAndParams (params, 'fetchOrders', 'pageSize', defaultPageSize);
         const request: Dict = {
-            'user': userAddress,
+            'aid': accountId,
         };
         if (market !== undefined) {
             const info = market['info'];
@@ -1388,7 +1422,6 @@ export default class fibe extends Exchange {
      * @param {int} [params.subAccountIndex] perp subaccount index, defaults to 0
      * @param {string} [params.marginMode] perp margin mode, defaults to cross
      * @param {int} [params.initialLeverage] optional perp initial leverage
-     * @param {boolean} [params.autoTopUpCollateralFromWallet] optional perp collateral top-up flag, defaults to true
      * @returns {Order} an order structure
      */
     async createOrder (symbol: string, type: OrderType, side: OrderSide, amount: number, price: Num = undefined, params = {}): Promise<Order> {
@@ -1470,8 +1503,6 @@ export default class fibe extends Exchange {
         if (initialLeverage !== undefined) {
             initialLeverage = this.fibeValidateU8Param ('createOrder', 'initialLeverage', initialLeverage, 1);
         }
-        let autoTopUpCollateralFromWallet = undefined;
-        [ autoTopUpCollateralFromWallet, params ] = this.handleOptionAndParams (params, 'createOrder', 'autoTopUpCollateralFromWallet', true);
         let commitment = undefined;
         [ commitment, params ] = this.handleOptionAndParams (params, 'createOrder', 'commitment', this.safeString (this.options, 'commitment', 'confirmed'));
         let preflightCommitment = undefined;
@@ -1533,7 +1564,6 @@ export default class fibe extends Exchange {
             'subAccountIndex': subAccountIndex,
             'marginMode': marginMode,
             'initialLeverage': initialLeverage,
-            'autoTopUpCollateralFromWallet': autoTopUpCollateralFromWallet,
         });
         let orderPrice = undefined;
         if (isLimitOrder) {
@@ -1685,7 +1715,7 @@ export default class fibe extends Exchange {
      */
     async cancelOrders (ids: string[], symbol: Str = undefined, params = {}): Promise<Order[]> {
         if (symbol === undefined) {
-            throw new ArgumentsRequired (this.id + ' cancelOrders() requires a symbol for local tx construction');
+            throw new ArgumentsRequired (this.id + ' cancelOrders() requires a symbol');
         }
         const orders = [];
         for (let i = 0; i < ids.length; i++) {
@@ -1706,14 +1736,23 @@ export default class fibe extends Exchange {
      */
     async cancelAllOrders (symbol: Str = undefined, params = {}): Promise<Order[]> {
         if (symbol === undefined) {
-            throw new ArgumentsRequired (this.id + ' cancelAllOrders() requires a symbol for local tx construction');
+            throw new ArgumentsRequired (this.id + ' cancelAllOrders() requires a symbol');
         }
         const fetchOpenOrdersParams: Dict = {};
         const user = this.safeString2 (params, 'user', 'address');
         if (user !== undefined) {
             fetchOpenOrdersParams['user'] = user;
         }
+        const accountId = this.safeString (params, 'accountId');
+        if (accountId !== undefined) {
+            fetchOpenOrdersParams['accountId'] = accountId;
+        }
+        const subAccountIndex = this.safeInteger (params, 'subAccountIndex');
+        if (subAccountIndex !== undefined) {
+            fetchOpenOrdersParams['subAccountIndex'] = subAccountIndex;
+        }
         const openOrders = await this.fetchOpenOrders (symbol, undefined, undefined, fetchOpenOrdersParams);
+        params = this.omit (params, 'accountId');
         const ids = [];
         for (let i = 0; i < openOrders.length; i++) {
             const id = this.safeString (openOrders[i], 'id');
@@ -1795,7 +1834,7 @@ export default class fibe extends Exchange {
     }
 
     fibeProgramId () {
-        return '4XD7tip3WpoAZsRwa1yMqpuLU8fnDbD4v2X2BiLFcApY';
+        return '24d8kVRSuEy4onKWSfvSUutDbXnSgdoPYMGqMwTQ1aRU';
     }
 
     solanaSystemProgramId () {
@@ -1855,9 +1894,12 @@ export default class fibe extends Exchange {
     }
 
     fibeValidateUnsignedIntegerParam (method, field, value) {
+        if ((value === undefined) || (value === null) || ((typeof value !== 'number') && (typeof value !== 'string'))) {
+            throw new BadRequest (this.id + ' ' + method + '() ' + field + ' must be an unsigned integer');
+        }
         const stringValue = this.numberToString (value);
         if (!this.fibeIsUnsignedIntegerString (stringValue)) {
-            throw new InvalidOrder (this.id + ' ' + method + '() ' + field + ' must be an unsigned integer');
+            throw new BadRequest (this.id + ' ' + method + '() ' + field + ' must be an unsigned integer');
         }
         return stringValue;
     }
@@ -1866,7 +1908,7 @@ export default class fibe extends Exchange {
         const stringValue = this.fibeValidateUnsignedIntegerParam (method, field, value);
         const numeric = parseInt (stringValue);
         if ((numeric < min) || (numeric > 255)) {
-            throw new InvalidOrder (this.id + ' ' + method + '() ' + field + ' must be between ' + this.numberToString (min) + ' and 255');
+            throw new BadRequest (this.id + ' ' + method + '() ' + field + ' must be between ' + this.numberToString (min) + ' and 255');
         }
         return numeric;
     }
@@ -1875,7 +1917,7 @@ export default class fibe extends Exchange {
         const stringValue = this.fibeValidateUnsignedIntegerParam (method, field, value);
         const numeric = parseInt (stringValue);
         if (numeric > 4294967295) {
-            throw new InvalidOrder (this.id + ' ' + method + '() ' + field + ' must be between 0 and 4294967295');
+            throw new BadRequest (this.id + ' ' + method + '() ' + field + ' must be between 0 and 4294967295');
         }
         return numeric;
     }
@@ -2194,37 +2236,13 @@ export default class fibe extends Exchange {
         return this.fibePda ([ this.solanaStringHex ('user_state'), this.solanaPubkeyHex (user) ]);
     }
 
-    fibeCalculateEncodedUserId (owner) {
-        const ownerHex = this.solanaPubkeyHex (owner);
-        let userIdHex = '';
-        for (let i = 0; i < 8; i++) {
-            let value = 0;
-            for (let bitIndex = 0; bitIndex < 8; bitIndex++) {
-                const bitValue = Math.pow (2, bitIndex);
-                let bitCount = 0;
-                for (let j = 0; j < 4; j++) {
-                    const byteValue = this.solanaHexByte (ownerHex, (j * 16) + (i * 2));
-                    bitCount = this.sum (bitCount, Math.floor (byteValue / bitValue) % 2);
-                }
-                if ((bitCount % 2) === 1) {
-                    value = this.sum (value, bitValue);
-                }
-            }
-            userIdHex += this.solanaU8Hex (value);
-        }
-        return userIdHex;
-    }
-
     fibeGetDexConfigPda () {
         return this.fibePda ([ this.solanaStringHex ('dex_config') ]);
     }
 
-    fibeGetUserIdPda (owner) {
-        return this.fibePda ([ this.solanaStringHex ('user_id'), this.fibeCalculateEncodedUserId (owner) ]);
-    }
-
     fibeGetAccountLabelHex (owner, subAccountIndex) {
-        return this.solanaU8Hex (subAccountIndex) + this.solanaPubkeyHex (owner).slice (2);
+        const ownerHex = this.solanaPubkeyHex (owner);
+        return this.solanaU8Hex (subAccountIndex) + ownerHex.slice (2);
     }
 
     fibeGetAccountLabelPda (owner, subAccountIndex) {
@@ -2235,25 +2253,32 @@ export default class fibe extends Exchange {
         return this.fibePda ([ this.solanaStringHex ('sub_account_state'), this.solanaPubkeyHex (owner), this.solanaU8Hex (subAccountIndex) ]);
     }
 
-    fibeGetUserMarginAccountPda (owner, subAccountIndex, quoteMint) {
-        return this.fibePda ([ this.solanaStringHex ('user_margin_account'), this.solanaPubkeyHex (owner), this.solanaU8Hex (subAccountIndex), this.solanaPubkeyHex (quoteMint) ]);
+    async fibeGetOrNextAccountId (rpcUrl, owner, subAccountIndex, commitment = 'confirmed', allowNext = true) {
+        const subAccountState = this.fibeGetSubAccountStatePda (owner, subAccountIndex);
+        const subAccountInfo = await this.solanaGetAccountInfo (rpcUrl, subAccountState, commitment);
+        if (subAccountInfo !== undefined) {
+            const subAccountHex = this.fibeAssertAccountDiscriminator (subAccountInfo['data'], 10, 'sub-account state');
+            return this.solanaReadU64FromHex (subAccountHex, 40);
+        }
+        if (!allowNext) {
+            throw new ExchangeError (this.id + ' account is not initialized for subAccountIndex ' + this.numberToString (subAccountIndex));
+        }
+        const dexConfig = await this.solanaGetAccountData (rpcUrl, this.fibeGetDexConfigPda (), commitment);
+        const dexConfigHex = this.fibeAssertAccountDiscriminator (dexConfig, 1, 'DEX config');
+        return this.solanaReadU64FromHex (dexConfigHex, 8);
     }
 
-    fibeGetOpenOrdersPerMarketPda (mt, owner, subAccountIndex, mi) {
+    fibeGetUserMarginAccountPda (accountId, quoteTokenIndex) {
+        return this.fibePda ([ this.solanaStringHex ('user_margin_account'), this.solanaU64leHex (accountId), this.solanaU16leHex (quoteTokenIndex) ]);
+    }
+
+    fibeGetOpenOrdersPerMarketPda (mt, accountId, mi) {
         const marketSeed = (mt === 'S') ? 'spot' : 'perp';
-        return this.fibePda ([ this.solanaStringHex (marketSeed), this.solanaStringHex ('open_orders_per_market'), this.solanaPubkeyHex (owner), this.solanaU8Hex (subAccountIndex), this.solanaU64leHex (mi) ]);
+        return this.fibePda ([ this.solanaStringHex (marketSeed), this.solanaStringHex ('open_orders_per_market'), this.solanaU64leHex (accountId), this.solanaU64leHex (mi) ]);
     }
 
     fibeGetSpotMarketVaultPda (mi, tokenMint) {
-        return this.fibePda ([ this.solanaStringHex ('spot_vault'), this.solanaU64leHex (mi), this.solanaPubkeyHex (tokenMint) ]);
-    }
-
-    fibeGetPerpMarketVaultPda (tokenMint) {
-        return this.fibePda ([ this.solanaStringHex ('perp_vault'), this.solanaPubkeyHex (tokenMint) ]);
-    }
-
-    fibeGetVaultAuthorityPda () {
-        return this.fibePda ([ this.solanaStringHex ('vault_authority') ]);
+        return this.fibePda ([ this.solanaStringHex ('spot_market_vault'), this.solanaU64leHex (mi), this.solanaPubkeyHex (tokenMint) ]);
     }
 
     fibeGetHfmmRegistryPda (mt, mi) {
@@ -2261,18 +2286,18 @@ export default class fibe extends Exchange {
         return this.fibePda ([ this.solanaStringHex (marketSeed), this.solanaStringHex ('hfmm_market_registry'), this.solanaU64leHex (mi) ]);
     }
 
-    fibeGetPerpControlParamsPda (quoteMint) {
-        return this.fibePda ([ this.solanaStringHex ('perp_control_params'), this.solanaPubkeyHex (quoteMint) ]);
+    fibeGetPerpControlParamsPda (quoteTokenIndex) {
+        return this.fibePda ([ this.solanaStringHex ('perp_control_params'), this.solanaU16leHex (quoteTokenIndex) ]);
     }
 
-    fibeGetHfmmMarginAccountsPda (quoteMint) {
-        return this.fibePda ([ this.solanaStringHex ('hfmm_margin_accounts'), this.solanaPubkeyHex (quoteMint) ]);
+    fibeGetHfmmMarginAccountsPda (quoteTokenIndex) {
+        return this.fibePda ([ this.solanaStringHex ('hfmm_margin_accounts'), this.solanaU16leHex (quoteTokenIndex) ]);
     }
 
     fibeGetTickArrayPda (mt, mi, priceInTicks) {
         const marketSeed = (mt === 'S') ? 'spot' : 'perp';
         const arrayStartTick = this.fibeGetTickArrayStartTick (priceInTicks);
-        return this.fibePda ([ this.solanaStringHex (marketSeed), this.solanaStringHex ('tick_array'), this.solanaU64leHex (mi), this.solanaU64leHex (arrayStartTick), this.solanaU64leHex (this.fibeTickSizeInArray ()) ]);
+        return this.fibePda ([ this.solanaStringHex (marketSeed), this.solanaStringHex ('tick_array'), this.solanaU64leHex (this.fibeTickSizeInArray ()), this.solanaU64leHex (mi), this.solanaU64leHex (arrayStartTick) ]);
     }
 
     fibeMaxTick () {
@@ -2284,7 +2309,7 @@ export default class fibe extends Exchange {
     }
 
     fibeMarketTickArrayBitmapOffset () {
-        return 312; // 8-byte discriminator + 304-byte market prefix
+        return 288; // 8-byte discriminator + 280-byte market prefix
     }
 
     solanaReadU64FromHex (hex, offset) {
@@ -2301,8 +2326,18 @@ export default class fibe extends Exchange {
         return this.solanaHexByte (hex, offset * 2);
     }
 
-    fibeDecodeTickArrayBitmap (marketData) {
-        const hex = this.binaryToBase16 (marketData);
+    fibeAssertAccountDiscriminator (data, expected, name) {
+        const hex = this.binaryToBase16 (data);
+        const actual = this.solanaReadU8FromHex (hex, 0);
+        if (actual !== expected) {
+            throw new ExchangeError (this.id + ' unexpected ' + name + ' discriminator ' + this.numberToString (actual));
+        }
+        return hex;
+    }
+
+    fibeDecodeTickArrayBitmap (mt, marketData) {
+        const discriminator = (mt === 'S') ? 33 : 66;
+        const hex = this.fibeAssertAccountDiscriminator (marketData, discriminator, 'market');
         const bitmapOffset = this.fibeMarketTickArrayBitmapOffset ();
         return {
             'askTickLowerBound': this.solanaReadU64FromHex (hex, bitmapOffset + 2048),
@@ -2333,7 +2368,8 @@ export default class fibe extends Exchange {
     }
 
     fibeDecodeTickArrayState (mt, data) {
-        const hex = this.binaryToBase16 (data);
+        const discriminator = (mt === 'S') ? 34 : 67;
+        const hex = this.fibeAssertAccountDiscriminator (data, discriminator, 'tick array');
         const startTick = parseInt (this.solanaReadU64FromHex (hex, 80));
         const tickStride = this.fibeTickArrayStride (mt);
         const ticks = [];
@@ -2555,7 +2591,7 @@ export default class fibe extends Exchange {
         const mt = this.safeString (market, 'mt');
         const mi = this.safeString (market, 'mi');
         const marketData = await this.solanaGetAccountData (rpcUrl, this.safeString (market, 'marketPubkey'), commitment);
-        const bitmap = this.fibeDecodeTickArrayBitmap (marketData);
+        const bitmap = this.fibeDecodeTickArrayBitmap (mt, marketData);
         const baseLots = this.fibeDecimalStringDivInteger (sizeInBase, this.safeString (market, 'lotSizeInBaseBaseUnits'), true);
         const candidates = [];
         if (side === 'B') {
@@ -2712,7 +2748,7 @@ export default class fibe extends Exchange {
     }
 
     fibeSpotPlaceOrderIx (input) {
-        let data = this.solanaBytesHex ([ 56, 0, 0, 0, 0, 0, 0, 0 ]);
+        let data = this.solanaBytesHex ([ 57, 0, 0, 0, 0, 0, 0, 0 ]);
         data += this.solanaU64leHex (input['priceInTicks']);
         data += this.solanaU64leHex (input['orderId']);
         data += this.solanaU8Hex (this.fibeSideIndex (input['side']));
@@ -2723,25 +2759,25 @@ export default class fibe extends Exchange {
         const accounts = [
             this.solanaAccount (this.solanaSystemProgramId ()),
             this.solanaAccount (input['owner'], true, true),
+            this.solanaAccount (this.fibeGetDexConfigPda ()),
+            this.solanaAccount (input['market'], true),
             this.solanaAccount (input['ownerSubAccountState'], true),
             this.solanaAccount (input['ownerState'], true),
             this.solanaAccount (input['openOrdersPerMarket'], true),
-            this.solanaAccount (this.fibeProgramId ()),
-            this.solanaAccount (this.fibeProgramId ()),
-            this.solanaAccount (this.fibeProgramId ()),
-            this.solanaAccount (this.fibeProgramId ()),
-            this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (input['ownerBaseTokenAccount'], true),
             this.solanaAccount (input['ownerQuoteTokenAccount'], true),
-            this.solanaAccount (input['market'], true),
             this.solanaAccount (input['tokenVaultBase'], true),
             this.solanaAccount (input['tokenVaultQuote'], true),
-            this.solanaAccount (input['vaultAuthority']),
-            this.solanaAccount (input['hfmmRegistry'], true),
             this.solanaAccount (input['tokenMintBase']),
             this.solanaAccount (input['tokenMintQuote']),
             this.solanaAccount (input['tokenProgramBase']),
             this.solanaAccount (input['tokenProgramQuote']),
+            this.solanaAccount (this.fibeProgramId ()),
+            this.solanaAccount (this.fibeProgramId ()),
+            this.solanaAccount (this.fibeProgramId ()),
+            this.solanaAccount (this.fibeProgramId ()),
+            this.solanaAccount (this.fibeProgramId ()),
+            this.solanaAccount (input['hfmmRegistry'], true),
         ];
         const tickArrays = this.safeList (input, 'tickArrays', [ input['tickArray'] ]);
         for (let i = 0; i < tickArrays.length; i++) {
@@ -2760,16 +2796,16 @@ export default class fibe extends Exchange {
             'programId': this.fibeProgramId (),
             'accounts': [
                 this.solanaAccount (this.solanaSystemProgramId ()),
-                this.solanaAccount (this.fibeGetDexConfigPda ()),
+                this.solanaAccount (this.fibeGetDexConfigPda (), true),
                 this.solanaAccount (owner, true, true),
-                this.solanaAccount (this.fibeGetUserIdPda (owner), true),
                 this.solanaAccount (this.fibeGetUserStatePda (owner), true),
                 this.solanaAccount (this.fibeGetAccountLabelPda (owner, subAccountIndex), true),
                 this.solanaAccount (this.fibeGetSubAccountStatePda (owner, subAccountIndex), true),
                 this.solanaAccount (this.fibeProgramId ()),
                 this.solanaAccount (this.fibeProgramId ()),
+                this.solanaAccount (this.fibeProgramId ()),
             ],
-            'data': this.solanaBytesHex ([ 16, 0, 0, 0, 0, 0, 0, 0 ]) + this.fibeCalculateEncodedUserId (owner) + this.solanaU8Hex (subAccountIndex) + this.solanaU8Hex (0) + accountLabel,
+            'data': this.solanaBytesHex ([ 16, 0, 0, 0, 0, 0, 0, 0 ]) + this.solanaU8Hex (subAccountIndex) + this.solanaU8Hex (0) + accountLabel,
         };
     }
 
@@ -2786,8 +2822,9 @@ export default class fibe extends Exchange {
         return {
             'programId': this.fibeProgramId (),
             'accounts': [
-                this.solanaAccount (input['market'], true),
                 this.solanaAccount (input['owner'], true, true),
+                this.solanaAccount (this.fibeGetDexConfigPda ()),
+                this.solanaAccount (input['market'], true),
                 this.solanaAccount (input['ownerSubAccountState'], true),
                 this.solanaAccount (input['ownerState'], true),
                 this.solanaAccount (input['openOrdersPerMarket'], true),
@@ -2796,55 +2833,44 @@ export default class fibe extends Exchange {
                 this.solanaAccount (input['ownerQuoteTokenAccount'], true),
                 this.solanaAccount (input['tokenVaultBase'], true),
                 this.solanaAccount (input['tokenVaultQuote'], true),
-                this.solanaAccount (input['vaultAuthority']),
                 this.solanaAccount (input['tokenMintBase']),
                 this.solanaAccount (input['tokenMintQuote']),
                 this.solanaAccount (input['tokenProgramBase']),
                 this.solanaAccount (input['tokenProgramQuote']),
             ],
-            'data': this.solanaBytesHex ([ 57, 0, 0, 0, 0, 0, 0, 0 ]) + this.solanaU64leHex (input['orderId']),
+            'data': this.solanaBytesHex ([ 58, 0, 0, 0, 0, 0, 0, 0 ]) + this.solanaU64leHex (input['orderId']),
         };
     }
 
     fibePerpPlaceOrderIx (input) {
         const isCrossMargin = input['isCrossMargin'] ? 1 : 0;
-        const autoTopUpCollateralFromWallet = input['autoTopUpCollateralFromWallet'] ? 1 : 0;
-        let data = this.solanaBytesHex ([ 134, 0, 0, 0, 0, 0, 0, 0 ]);
+        let data = this.solanaBytesHex ([ 135, 0, 0, 0, 0, 0, 0, 0 ]);
         data += this.solanaU64leHex (input['priceInTicks']);
         data += this.solanaU64leHex (input['orderId']);
         data += this.solanaU8Hex (this.fibeSideIndex (input['side']));
         data += this.solanaU8Hex (isCrossMargin);
-        data += this.solanaU8Hex (autoTopUpCollateralFromWallet);
         data += this.solanaOptionU8Hex (input['initialLeverage']);
         data += this.solanaOptionU64Hex (input['sizeInBase']);
         data += this.solanaOptionU64Hex (undefined);
         data += this.solanaU8Hex (this.fibeTimeInForceIndex (input['timeInForce']));
         data += this.solanaOptionU16Hex (undefined);
-        let ownerOrDelegateQuoteTokenAccount = this.solanaAccount (this.fibeProgramId ());
-        if (input['ownerOrDelegateQuoteTokenAccount'] !== undefined) {
-            ownerOrDelegateQuoteTokenAccount = this.solanaAccount (input['ownerOrDelegateQuoteTokenAccount'], true);
-        }
         const accounts = [
             this.solanaAccount (this.solanaSystemProgramId ()),
-            this.solanaAccount (input['market'], true),
-            this.solanaAccount (input['ownerSubAccountState'], true),
+            this.solanaAccount (this.fibeGetDexConfigPda ()),
             this.solanaAccount (input['ownerOrDelegate'], true, true),
+            this.solanaAccount (input['market'], true),
+            this.solanaAccount (input['perpControlParams']),
+            this.solanaAccount (input['hfmmMarginAccounts'], true),
+            this.solanaAccount (input['hfmmRegistry'], true),
+            this.solanaAccount (input['ownerSubAccountState'], true),
             this.solanaAccount (input['ownerState'], true),
             this.solanaAccount (input['ownerMarginAccount'], true),
             this.solanaAccount (input['openOrdersPerMarket'], true),
-            ownerOrDelegateQuoteTokenAccount,
             this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (this.fibeProgramId ()),
-            this.solanaAccount (input['perpControlParams'], true),
-            this.solanaAccount (input['hfmmMarginAccounts'], true),
-            this.solanaAccount (input['tokenVaultQuote'], true),
-            this.solanaAccount (input['vaultAuthority']),
-            this.solanaAccount (input['hfmmRegistry'], true),
-            this.solanaAccount (input['tokenMintQuote']),
-            this.solanaAccount (input['tokenProgramQuote']),
         ];
         const tickArrays = this.safeList (input, 'tickArrays', [ input['tickArray'] ]);
         for (let i = 0; i < tickArrays.length; i++) {
@@ -2861,18 +2887,16 @@ export default class fibe extends Exchange {
         return {
             'programId': this.fibeProgramId (),
             'accounts': [
-                this.solanaAccount (input['market'], true),
-                this.solanaAccount (input['ownerSubAccountState'], true),
                 this.solanaAccount (input['ownerOrDelegate'], true, true),
+                this.solanaAccount (input['market'], true),
+                this.solanaAccount (input['perpControlParams']),
+                this.solanaAccount (input['ownerSubAccountState'], true),
                 this.solanaAccount (input['ownerState'], true),
                 this.solanaAccount (input['ownerMarginAccount'], true),
                 this.solanaAccount (input['openOrdersPerMarket'], true),
-                this.solanaAccount (input['perpControlParams']),
-                this.solanaAccount (input['tokenVaultQuote'], true),
-                this.solanaAccount (input['vaultAuthority']),
                 this.solanaAccount (input['tickArray'], true),
             ],
-            'data': this.solanaBytesHex ([ 135, 0, 0, 0, 0, 0, 0, 0 ]) + this.solanaU64leHex (input['orderId']) + this.solanaOptionU16Hex (undefined),
+            'data': this.solanaBytesHex ([ 136, 0, 0, 0, 0, 0, 0, 0 ]) + this.solanaU64leHex (input['orderId']) + this.solanaU8Hex (0),
         };
     }
 
@@ -3018,14 +3042,15 @@ export default class fibe extends Exchange {
     }
 
     fibeReadOpenOrderPriceInTicks (data, mt, orderId) {
-        const hex = this.binaryToBase16 (data);
-        const orderCount = parseInt (this.solanaReadU32FromHex (hex, 60));
-        const orderSize = (mt === 'S') ? 144 : 160;
-        let offset = 64;
+        const discriminator = (mt === 'S') ? 35 : 68;
+        const hex = this.fibeAssertAccountDiscriminator (data, discriminator, 'open orders');
+        const orderCount = parseInt (this.solanaReadU32FromHex (hex, 36));
+        const orderSize = (mt === 'S') ? 104 : 120;
+        let offset = 40;
         for (let i = 0; i < orderCount; i++) {
             const clientOrderId = this.solanaReadU64FromHex (hex, offset);
             if ((clientOrderId !== '0') && (clientOrderId === orderId)) {
-                return this.solanaReadU64FromHex (hex, offset + 56);
+                return this.solanaReadU64FromHex (hex, offset + 16);
             }
             offset = this.sum (offset, orderSize);
         }
@@ -3057,13 +3082,14 @@ export default class fibe extends Exchange {
             this.safeString (market, 'lotSizeInBaseBaseUnits')
         );
         const orderTickArray = this.fibeGetTickArrayPda (mt, mi, priceInTicks);
-        const openOrdersPerMarket = this.fibeGetOpenOrdersPerMarketPda (mt, owner, orderSubAccountIndex, mi);
         const rpcUrl = this.safeString (params, 'rpcUrl');
         const commitment = this.safeString (params, 'commitment', 'confirmed');
+        const accountId = await this.fibeGetOrNextAccountId (rpcUrl, owner, orderSubAccountIndex, commitment);
+        const openOrdersPerMarket = this.fibeGetOpenOrdersPerMarketPda (mt, accountId, mi);
         const tickArrays = await this.fibeGetTickArraysForOrder (rpcUrl, market, priceInTicks, sizeInBase, this.safeString (params, 'side'), commitment);
-        const tokenProgramQuote = await this.solanaGetTokenProgram (rpcUrl, this.safeString (market, 'quoteMint'), this.safeString (market, 'tokenProgramQuote'), commitment);
         let ixs = [];
         if (mt === 'S') {
+            const tokenProgramQuote = await this.solanaGetTokenProgram (rpcUrl, this.safeString (market, 'quoteMint'), this.safeString (market, 'tokenProgramQuote'), commitment);
             const tokenProgramBase = await this.solanaGetTokenProgram (rpcUrl, this.safeString (market, 'baseMint'), this.safeString (market, 'tokenProgramBase'), commitment);
             const ownerBaseTokenAccount = this.solanaGetAssociatedTokenAddress (this.safeString (market, 'baseMint'), owner, tokenProgramBase);
             const ownerQuoteTokenAccount = this.solanaGetAssociatedTokenAddress (this.safeString (market, 'quoteMint'), owner, tokenProgramQuote);
@@ -3095,7 +3121,6 @@ export default class fibe extends Exchange {
                 'market': this.safeString (market, 'marketPubkey'),
                 'tokenVaultBase': this.fibeGetSpotMarketVaultPda (mi, this.safeString (market, 'baseMint')),
                 'tokenVaultQuote': this.fibeGetSpotMarketVaultPda (mi, this.safeString (market, 'quoteMint')),
-                'vaultAuthority': this.fibeGetVaultAuthorityPda (),
                 'hfmmRegistry': this.fibeGetHfmmRegistryPda ('S', mi),
                 'tokenMintBase': this.safeString (market, 'baseMint'),
                 'tokenMintQuote': this.safeString (market, 'quoteMint'),
@@ -3110,39 +3135,22 @@ export default class fibe extends Exchange {
                 'tickArrays': tickArrays,
             }));
         } else {
-            const autoTopUp = this.safeBool (params, 'autoTopUpCollateralFromWallet', true);
-            let ownerQuoteTokenAccount = undefined;
-            if (autoTopUp) {
-                ownerQuoteTokenAccount = this.solanaGetAssociatedTokenAddress (this.safeString (market, 'quoteMint'), owner, tokenProgramQuote);
-            }
-            if (ownerQuoteTokenAccount !== undefined) {
-                const createAtaIx = await this.solanaCreateAssociatedTokenAccountIfNeeded (rpcUrl, owner, owner, this.safeString (market, 'quoteMint'), tokenProgramQuote, commitment);
-                if (createAtaIx !== undefined) {
-                    ixs.push (createAtaIx);
-                }
-            }
             const isCrossMargin = (marginMode === 'cross');
+            const quoteTokenIndex = this.safeString (market, 'quoteTokenIndex');
             ixs.push (this.fibePerpPlaceOrderIx ({
-                'owner': owner,
                 'ownerOrDelegate': owner,
                 'ownerSubAccountState': this.fibeGetSubAccountStatePda (owner, subAccountIndex),
                 'ownerState': this.fibeGetUserStatePda (owner),
-                'ownerMarginAccount': this.fibeGetUserMarginAccountPda (owner, subAccountIndex, this.safeString (market, 'quoteMint')),
+                'ownerMarginAccount': this.fibeGetUserMarginAccountPda (accountId, quoteTokenIndex),
                 'openOrdersPerMarket': openOrdersPerMarket,
-                'ownerOrDelegateQuoteTokenAccount': ownerQuoteTokenAccount,
                 'market': this.safeString (market, 'marketPubkey'),
-                'perpControlParams': this.fibeGetPerpControlParamsPda (this.safeString (market, 'quoteMint')),
-                'hfmmMarginAccounts': this.fibeGetHfmmMarginAccountsPda (this.safeString (market, 'quoteMint')),
-                'tokenVaultQuote': this.fibeGetPerpMarketVaultPda (this.safeString (market, 'quoteMint')),
-                'vaultAuthority': this.fibeGetVaultAuthorityPda (),
+                'perpControlParams': this.fibeGetPerpControlParamsPda (quoteTokenIndex),
+                'hfmmMarginAccounts': this.fibeGetHfmmMarginAccountsPda (quoteTokenIndex),
                 'hfmmRegistry': this.fibeGetHfmmRegistryPda ('P', mi),
-                'tokenMintQuote': this.safeString (market, 'quoteMint'),
-                'tokenProgramQuote': tokenProgramQuote,
                 'priceInTicks': priceInTicks,
                 'orderId': orderId,
                 'side': this.safeString (params, 'side'),
                 'isCrossMargin': isCrossMargin,
-                'autoTopUpCollateralFromWallet': autoTopUp,
                 'initialLeverage': this.safeInteger (params, 'initialLeverage'),
                 'sizeInBase': sizeInBase,
                 'timeInForce': this.safeString (params, 'timeInForce'),
@@ -3151,6 +3159,7 @@ export default class fibe extends Exchange {
             }));
         }
         const result = await this.solanaSignAndSend (rpcUrl, owner, privateKeyHex, ixs, params);
+        result['accountId'] = accountId;
         result['openOrdersPerMarket'] = openOrdersPerMarket;
         result['priceInTicks'] = priceInTicks;
         result['tickArray'] = orderTickArray;
@@ -3169,9 +3178,10 @@ export default class fibe extends Exchange {
         if (mt === 'S') {
             subAccountIndex = 0;
         }
-        const openOrdersPerMarket = this.fibeGetOpenOrdersPerMarketPda (mt, owner, subAccountIndex, mi);
         const rpcUrl = this.safeString (params, 'rpcUrl');
         const commitment = this.safeString (params, 'commitment', 'confirmed');
+        const accountId = await this.fibeGetOrNextAccountId (rpcUrl, owner, subAccountIndex, commitment, false);
+        const openOrdersPerMarket = this.fibeGetOpenOrdersPerMarketPda (mt, accountId, mi);
         const openOrdersAccount = await this.solanaGetAccountData (rpcUrl, openOrdersPerMarket, commitment);
         const priceInTicks = this.fibeReadOpenOrderPriceInTicks (openOrdersAccount, mt, orderId);
         const tickArray = this.fibeGetTickArrayPda (mt, mi, priceInTicks);
@@ -3190,7 +3200,6 @@ export default class fibe extends Exchange {
                 'market': this.safeString (market, 'marketPubkey'),
                 'tokenVaultBase': this.fibeGetSpotMarketVaultPda (mi, this.safeString (market, 'baseMint')),
                 'tokenVaultQuote': this.fibeGetSpotMarketVaultPda (mi, this.safeString (market, 'quoteMint')),
-                'vaultAuthority': this.fibeGetVaultAuthorityPda (),
                 'tokenMintBase': this.safeString (market, 'baseMint'),
                 'tokenMintQuote': this.safeString (market, 'quoteMint'),
                 'tokenProgramBase': tokenProgramBase,
@@ -3198,21 +3207,21 @@ export default class fibe extends Exchange {
                 'orderId': orderId,
             });
         } else {
+            const quoteTokenIndex = this.safeString (market, 'quoteTokenIndex');
             ix = this.fibePerpCloseRestingOrderIx ({
                 'market': this.safeString (market, 'marketPubkey'),
                 'ownerSubAccountState': this.fibeGetSubAccountStatePda (owner, subAccountIndex),
                 'ownerOrDelegate': owner,
                 'ownerState': this.fibeGetUserStatePda (owner),
-                'ownerMarginAccount': this.fibeGetUserMarginAccountPda (owner, subAccountIndex, this.safeString (market, 'quoteMint')),
+                'ownerMarginAccount': this.fibeGetUserMarginAccountPda (accountId, quoteTokenIndex),
                 'openOrdersPerMarket': openOrdersPerMarket,
-                'perpControlParams': this.fibeGetPerpControlParamsPda (this.safeString (market, 'quoteMint')),
-                'tokenVaultQuote': this.fibeGetPerpMarketVaultPda (this.safeString (market, 'quoteMint')),
-                'vaultAuthority': this.fibeGetVaultAuthorityPda (),
+                'perpControlParams': this.fibeGetPerpControlParamsPda (quoteTokenIndex),
                 'tickArray': tickArray,
                 'orderId': orderId,
             });
         }
         const result = await this.solanaSignAndSend (rpcUrl, owner, privateKeyHex, [ ix ], params);
+        result['accountId'] = accountId;
         result['openOrdersPerMarket'] = openOrdersPerMarket;
         result['priceInTicks'] = priceInTicks;
         result['tickArray'] = tickArray;
@@ -3231,6 +3240,7 @@ export default class fibe extends Exchange {
             'marketPubkey': this.safeString (info, 'marketPubkey'),
             'baseMint': this.safeString (info, 'baseMint'),
             'quoteMint': this.safeString (info, 'quoteMint'),
+            'quoteTokenIndex': this.safeString (info, 'qti'),
             'baseDecimals': this.safeInteger (info, 'baseDecimals'),
             'quoteDecimals': this.safeInteger (info, 'quoteDecimals'),
             'tickSizeInQuoteBaseUnits': this.safeString (info, 'tickSizeInQuoteBaseUnits'),
@@ -3262,7 +3272,7 @@ export default class fibe extends Exchange {
         return owner;
     }
 
-    async solanaGetAccountData (rpcUrl, pubkey, commitment = 'confirmed'): Promise<string> {
+    async solanaGetAccountData (rpcUrl, pubkey, commitment = 'confirmed') {
         const accountInfo = await this.solanaGetAccountInfo (rpcUrl, pubkey, commitment);
         if (accountInfo === undefined) {
             throw new ExchangeError (this.id + ' account not found ' + pubkey);
@@ -3359,8 +3369,10 @@ export default class fibe extends Exchange {
     parseOrderStatus (status: Str): Str {
         const statuses: Dict = {
             'O': 'open',
+            'P': 'open',
             'F': 'closed',
             'C': 'canceled',
+            'R': 'rejected',
         };
         return this.safeString (statuses, status, status);
     }
@@ -3407,7 +3419,7 @@ export default class fibe extends Exchange {
         };
         const result = this.safeString (timeInForces, upper);
         if (result === undefined) {
-            throw new InvalidOrder (this.id + ' createOrder() local transaction construction supports timeInForce GTC, IOC, PO/ALO, or FOK');
+            throw new InvalidOrder (this.id + ' createOrder() supports timeInForce GTC, IOC, PO/ALO, or FOK');
         }
         return result;
     }
@@ -3438,6 +3450,38 @@ export default class fibe extends Exchange {
             return [ this.walletAddress, params ];
         }
         throw new ArgumentsRequired (this.id + ' ' + methodName + '() requires a user parameter inside \'params\' or the wallet address set');
+    }
+
+    async fibeAccountId (methodName: string, params: Dict) {
+        let accountId = undefined;
+        [ accountId, params ] = this.handleOptionAndParams (params, methodName, 'accountId');
+        let subAccountIndex = undefined;
+        [ subAccountIndex, params ] = this.handleOptionAndParams (params, methodName, 'subAccountIndex', 0);
+        subAccountIndex = this.fibeValidateU8Param (methodName, 'subAccountIndex', subAccountIndex);
+        if (accountId !== undefined) {
+            accountId = this.fibeValidateUnsignedIntegerParam (methodName, 'accountId', accountId);
+            params = this.omit (params, [ 'user', 'address' ]);
+            return [ accountId, params ];
+        }
+        let userAddress = undefined;
+        [ userAddress, params ] = this.handlePublicAddress (methodName, params);
+        const cacheKey = userAddress + ':' + this.numberToString (subAccountIndex);
+        const accountIds = this.safeDict (this.options, 'accountIds', {});
+        accountId = this.safeString (accountIds, cacheKey);
+        if (accountId === undefined) {
+            const response = await this.publicGetAccountId ({
+                'owner': userAddress,
+                'subAccountIndex': subAccountIndex,
+            });
+            accountId = this.safeString (response, 'accountId');
+        }
+        if (accountId === undefined) {
+            throw new ExchangeError (this.id + ' ' + methodName + '() could not resolve the account id');
+        }
+        accountId = this.fibeValidateUnsignedIntegerParam (methodName, 'accountId', accountId);
+        accountIds[cacheKey] = accountId;
+        this.options['accountIds'] = accountIds;
+        return [ accountId, params ];
     }
 
     sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
