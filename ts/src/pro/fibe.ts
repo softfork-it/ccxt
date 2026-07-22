@@ -1,7 +1,7 @@
 //  ---------------------------------------------------------------------------
 
 import fibeRest from '../fibe.js';
-import { ArgumentsRequired, ExchangeError } from '../base/errors.js';
+import { ExchangeError } from '../base/errors.js';
 import Client from '../base/ws/Client.js';
 import { ArrayCache, ArrayCacheByTimestamp } from '../base/ws/Cache.js';
 import type { Balances, Bool, Dict, Int, Market, OHLCV, Order, OrderBook, Position, Str, Strings, Ticker, Trade } from '../base/types.js';
@@ -59,25 +59,18 @@ export default class fibe extends fibeRest {
         return this.market (prefix + mi);
     }
 
-    fibeWsClearinghouseSubscription (methodName: string, userAddress: string, params = {}) {
-        let subAccountIndex = undefined;
-        [ subAccountIndex, params ] = this.handleOptionAndParams (params, methodName, 'subAccountIndex', 0);
-        subAccountIndex = this.fibeValidateU8Param (methodName, 'subAccountIndex', subAccountIndex);
-        let quoteMint = undefined;
-        [ quoteMint, params ] = this.handleOptionAndParams (params, methodName, 'quoteMint');
-        if (quoteMint === undefined) {
-            throw new ArgumentsRequired (this.id + ' ' + methodName + '() requires a quoteMint parameter in params or exchange.options');
-        }
+    async fibeWsAccountSubscription (methodName: string, type: string, params = {}) {
+        let accountId = undefined;
+        const accountIdResponse = await this.fibeAccountId (methodName, params);
+        [ accountId, params ] = accountIdResponse;
         return [ {
-            'type': 'clearinghouseState',
-            'user': userAddress,
-            'subAccountIndex': subAccountIndex,
-            'quoteMint': quoteMint,
+            'type': type,
+            'aid': accountId,
         }, params ];
     }
 
-    fibeWsClearinghouseHash (entry: Dict): string {
-        return 'clearinghouseState:' + this.safeString (entry, 'user') + ':' + this.safeString (entry, 'subAccountIndex') + ':' + this.safeString (entry, 'quoteMint');
+    fibeWsAccountHash (type: string, entry: Dict): string {
+        return type + ':' + this.safeString (entry, 'aid');
     }
 
     /**
@@ -124,9 +117,20 @@ export default class fibe extends fibeRest {
         const market = this.market (symbol);
         symbol = market['symbol'];
         const messageHash = 'orderbook:' + symbol;
+        let nSigFigs = undefined;
+        [ nSigFigs, params ] = this.handleOptionAndParams (params, 'watchOrderBook', 'nSigFigs');
+        let mantissa = undefined;
+        [ mantissa, params ] = this.handleOptionAndParams (params, 'watchOrderBook', 'mantissa');
+        const subscription = this.fibeWsSubscription ('l2Book', market);
+        if (nSigFigs !== undefined) {
+            subscription['nSigFigs'] = nSigFigs;
+        }
+        if (mantissa !== undefined) {
+            subscription['mantissa'] = mantissa;
+        }
         const request: Dict = {
             'method': 'subscribe',
-            'subscription': this.fibeWsSubscription ('l2Book', market),
+            'subscription': subscription,
         };
         const clientSubscription: Dict = {
             'limit': limit,
@@ -211,8 +215,9 @@ export default class fibe extends fibeRest {
      * @returns {object[]} a list of [order structures]{@link https://docs.ccxt.com/?id=order-structure}
      */
     async watchOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
-        let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('watchOrders', params);
+        let subscription = undefined;
+        const subscriptionResponse = await this.fibeWsAccountSubscription ('watchOrders', 'orderUpdates', params);
+        [ subscription, params ] = subscriptionResponse;
         await this.loadMarkets ();
         let messageHash = 'orders';
         if (symbol !== undefined) {
@@ -222,12 +227,9 @@ export default class fibe extends fibeRest {
         const url = this.urls['api']['ws']['public'];
         const request: Dict = {
             'method': 'subscribe',
-            'subscription': {
-                'type': 'orderUpdates',
-                'user': userAddress,
-            },
+            'subscription': subscription,
         };
-        const orders = await this.watch (url, messageHash, this.extend (request, params), 'orderUpdates:' + userAddress);
+        const orders = await this.watch (url, messageHash, this.extend (request, params), 'orderUpdates:' + this.safeString (subscription, 'aid'));
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
@@ -271,8 +273,9 @@ export default class fibe extends fibeRest {
      * @returns {object[]} a list of [trade structures]{@link https://docs.ccxt.com/?id=trade-structure}
      */
     async watchMyTrades (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
-        let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('watchMyTrades', params);
+        let subscription = undefined;
+        const subscriptionResponse = await this.fibeWsAccountSubscription ('watchMyTrades', 'userFills', params);
+        [ subscription, params ] = subscriptionResponse;
         await this.loadMarkets ();
         let messageHash = 'myTrades';
         if (symbol !== undefined) {
@@ -282,12 +285,9 @@ export default class fibe extends fibeRest {
         const url = this.urls['api']['ws']['public'];
         const request: Dict = {
             'method': 'subscribe',
-            'subscription': {
-                'type': 'userFills',
-                'user': userAddress,
-            },
+            'subscription': subscription,
         };
-        const trades = await this.watch (url, messageHash, this.extend (request, params), 'userFills:' + userAddress);
+        const trades = await this.watch (url, messageHash, this.extend (request, params), 'userFills:' + this.safeString (subscription, 'aid'));
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
@@ -325,29 +325,26 @@ export default class fibe extends fibeRest {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, defaults to walletAddress
      * @param {string} [params.type] spot or swap, defaults to spot
-     * @param {int} [params.subAccountIndex] perpetual subaccount index, defaults to 0
-     * @param {string} [params.quoteMint] perpetual quote mint, required when params.type is swap
+     * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
+     * @param {string} [params.accountId] resolved account id, bypasses the account-id request
      * @returns {object} a [balance structure]{@link https://docs.ccxt.com/?id=balance-structure}
      */
     async watchBalance (params = {}): Promise<Balances> {
         await this.loadMarkets ();
-        let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('watchBalance', params);
         let type = undefined;
         [ type, params ] = this.handleMarketTypeAndParams ('watchBalance', undefined, params);
         let subscription = undefined;
         let subscribeHash = undefined;
         let messageHash = undefined;
         if (type === 'spot') {
-            subscription = {
-                'type': 'spotState',
-                'user': userAddress,
-            };
-            subscribeHash = 'spotState:' + userAddress;
+            const subscriptionResponse = await this.fibeWsAccountSubscription ('watchBalance', 'spotState', params);
+            [ subscription, params ] = subscriptionResponse;
+            subscribeHash = this.fibeWsAccountHash ('spotState', subscription);
             messageHash = subscribeHash + '::balance';
         } else if (type === 'swap') {
-            [ subscription, params ] = this.fibeWsClearinghouseSubscription ('watchBalance', userAddress, params);
-            subscribeHash = this.fibeWsClearinghouseHash (subscription);
+            const subscriptionResponse = await this.fibeWsAccountSubscription ('watchBalance', 'allClearinghouseState', params);
+            [ subscription, params ] = subscriptionResponse;
+            subscribeHash = this.fibeWsAccountHash ('allClearinghouseState', subscription);
             messageHash = subscribeHash + '::balance';
         } else {
             throw new ExchangeError (this.id + ' watchBalance() supports spot or swap accounts');
@@ -377,16 +374,31 @@ export default class fibe extends fibeRest {
                 account['used'] = this.safeString (rawBalance, 'hold');
                 result[code] = account;
             }
-        } else if (channel === 'clearinghouseState') {
+        } else if (channel === 'allClearinghouseState') {
             type = 'swap';
-            const state = this.safeDict (data, 'clearinghouseState', {});
-            const marginSummary = this.safeDict (state, 'marginSummary', {});
-            const account = this.account ();
-            account['free'] = this.safeString (state, 'withdrawable');
-            account['used'] = this.safeString (marginSummary, 'totalMarginUsed');
-            account['total'] = this.safeString (marginSummary, 'accountValue');
-            const code = this.safeCurrencyCode (this.safeString (data, 'quoteMint'));
-            result[code] = account;
+            const states = this.safeList (data, 'states', []);
+            for (let i = 0; i < states.length; i++) {
+                const entry = states[i];
+                const state = this.safeDict (entry, 'clearinghouseState', {});
+                const marginSummary = this.safeDict (state, 'marginSummary', {});
+                const account = this.account ();
+                account['free'] = this.safeString (state, 'withdrawable');
+                account['used'] = this.safeString (marginSummary, 'totalMarginUsed');
+                account['total'] = this.safeString (marginSummary, 'accountValue');
+                const quoteTokenIndex = this.safeInteger (entry, 'qti');
+                let code = undefined;
+                const marketValues = Object.values (this.markets);
+                for (let j = 0; j < marketValues.length; j++) {
+                    const market = marketValues[j];
+                    if (market['swap'] && (this.safeInteger (market['info'], 'qti') === quoteTokenIndex)) {
+                        code = market['settle'];
+                        break;
+                    }
+                }
+                if (code !== undefined) {
+                    result[code] = account;
+                }
+            }
             this.handlePositions (client, message);
         }
         if (type !== undefined) {
@@ -395,9 +407,9 @@ export default class fibe extends fibeRest {
             }
             const balance = this.safeBalance (result);
             this.balance[type] = balance;
-            let messageHash = 'spotState:' + this.safeString (data, 'user') + '::balance';
+            let messageHash = this.fibeWsAccountHash ('spotState', data) + '::balance';
             if (type === 'swap') {
-                messageHash = this.fibeWsClearinghouseHash (data) + '::balance';
+                messageHash = this.fibeWsAccountHash ('allClearinghouseState', data) + '::balance';
             }
             client.resolve (balance, messageHash);
         }
@@ -406,24 +418,23 @@ export default class fibe extends fibeRest {
     /**
      * @method
      * @name fibe#watchPositions
-     * @description watches perpetual positions for one wallet subaccount and quote mint
+     * @description watches perpetual positions for one account
      * @param {string[]} [symbols] unified perpetual market symbols
      * @param {int} [since] unused because the stream does not include position timestamps
      * @param {int} [limit] the maximum number of positions to return
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, defaults to walletAddress
-     * @param {int} [params.subAccountIndex] perpetual subaccount index, defaults to 0
-     * @param {string} params.quoteMint perpetual quote mint
+     * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
+     * @param {string} [params.accountId] resolved account id, bypasses the account-id request
      * @returns {object[]} a list of [position structures]{@link https://docs.ccxt.com/?id=position-structure}
      */
     async watchPositions (symbols: Strings = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Position[]> {
         await this.loadMarkets ();
-        let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('watchPositions', params);
         symbols = this.marketSymbols (symbols, 'swap');
         let subscription = undefined;
-        [ subscription, params ] = this.fibeWsClearinghouseSubscription ('watchPositions', userAddress, params);
-        const subscribeHash = this.fibeWsClearinghouseHash (subscription);
+        const subscriptionResponse = await this.fibeWsAccountSubscription ('watchPositions', 'allClearinghouseState', params);
+        [ subscription, params ] = subscriptionResponse;
+        const subscribeHash = this.fibeWsAccountHash ('allClearinghouseState', subscription);
         let messageHash = subscribeHash + '::positions';
         if ((symbols !== undefined) && (symbols.length > 0)) {
             messageHash += '::' + symbols.join (',');
@@ -442,19 +453,22 @@ export default class fibe extends fibeRest {
 
     handlePositions (client: Client, message: Dict) {
         const data = this.safeDict (message, 'data', {});
-        const state = this.safeDict (data, 'clearinghouseState', {});
-        const rawPositions = this.safeList (state, 'assetPositions', []);
+        const states = this.safeList (data, 'states', []);
         const positions = [];
-        for (let i = 0; i < rawPositions.length; i++) {
-            const rawPosition = this.extend ({
-                'user': this.safeString (data, 'user'),
-                'subAccountIndex': this.safeInteger (data, 'subAccountIndex'),
-                'quoteMint': this.safeString (data, 'quoteMint'),
-            }, rawPositions[i]);
-            const position = this.parsePosition (rawPosition);
-            positions.push (position);
+        for (let i = 0; i < states.length; i++) {
+            const entry = states[i];
+            const state = this.safeDict (entry, 'clearinghouseState', {});
+            const rawPositions = this.safeList (state, 'assetPositions', []);
+            for (let j = 0; j < rawPositions.length; j++) {
+                const rawPosition = this.extend ({
+                    'accountId': this.safeString (entry, 'aid'),
+                    'quoteTokenIndex': this.safeValue (entry, 'qti'),
+                }, rawPositions[j]);
+                const position = this.parsePosition (rawPosition);
+                positions.push (position);
+            }
         }
-        const baseMessageHash = this.fibeWsClearinghouseHash (data) + '::positions';
+        const baseMessageHash = this.fibeWsAccountHash ('allClearinghouseState', data) + '::positions';
         const messageHashes = this.findMessageHashes (client, baseMessageHash);
         for (let i = 0; i < messageHashes.length; i++) {
             const messageHash = messageHashes[i];
@@ -552,8 +566,8 @@ export default class fibe extends fibeRest {
         const channel = this.safeString (message, 'channel', '');
         const methods: Dict = {
             'activeAssetCtx': this.handleTicker,
+            'allClearinghouseState': this.handleBalance,
             'candle': this.handleOHLCV,
-            'clearinghouseState': this.handleBalance,
             'l2Book': this.handleOrderBook,
             'orderUpdates': this.handleOrders,
             'pong': this.handlePong,

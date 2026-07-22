@@ -5,26 +5,32 @@
     "methods": {
         "fetchBalance": [
             {
-                "description": "fetchBalance maps the wallet address",
+                "description": "fetchBalance resolves the wallet subaccount to an account id",
                 "method": "fetchBalance",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/spot-state?user=wallet",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/account-id?owner=wallet&subAccountIndex=0",
                 "input": []
+            },
+            {
+                "description": "fetchBalance requests balances by account id",
+                "method": "fetchBalance",
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/spot-state?aid=42",
+                "input": [{"accountId": "42", "user": "ignored-owner"}]
             }
         ],
         "fetchPositions": [
             {
                 "description": "fetchPositions maps the wallet address",
                 "method": "fetchPositions",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state?user=wallet",
-                "input": []
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state?aid=42",
+                "input": [null, {"accountId": "42"}]
             }
         ],
         "fetchPosition": [
             {
                 "description": "fetchPosition filters positions by symbol",
                 "method": "fetchPosition",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state?user=wallet",
-                "input": ["SOL/USDC:USDC"]
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state?aid=42",
+                "input": ["SOL/USDC:USDC", {"accountId": "42"}]
             }
         ],
         "fetchTicker": [
@@ -87,8 +93,8 @@
             {
                 "description": "fetchMyTrades maps the wallet, symbol, and time bounds",
                 "method": "fetchMyTrades",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/user-trades?user=wallet&mi=1&mt=S&startTime=1783763617&endTime=1783767217&limit=25",
-                "input": ["SOL/USDC", 1783763617000, 25, {"until": 1783767217000}]
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/user-trades?aid=42&mi=1&mt=S&startTime=1783763617&endTime=1783767217&limit=25",
+                "input": ["SOL/USDC", 1783763617000, 25, {"until": 1783767217000, "accountId": "42"}]
             }
         ],
         "fetchOHLCV": [
@@ -109,40 +115,40 @@
             {
                 "description": "fetchOrder maps the full order identity",
                 "method": "fetchOrder",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/order?user=wallet&orderId=42&mi=1&mt=S&subAccountIndex=2",
-                "input": ["42", "SOL/USDC", {"subAccountIndex": 2}]
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/order?aid=42&orderId=42&mi=1&mt=S",
+                "input": ["42", "SOL/USDC", {"subAccountIndex": 2, "accountId": "42"}]
             }
         ],
         "fetchOpenOrders": [
             {
                 "description": "fetchOpenOrders scopes the query by symbol",
                 "method": "fetchOpenOrders",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/open-orders?user=wallet&mi=1&mt=S",
-                "input": ["SOL/USDC"]
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/open-orders?aid=42&mi=1&mt=S",
+                "input": ["SOL/USDC", null, null, {"accountId": "42"}]
             }
         ],
         "fetchOrders": [
             {
                 "description": "fetchOrders maps pagination to the historical order request",
                 "method": "fetchOrders",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?user=wallet&mi=1&mt=S&page=2&pageSize=1",
-                "input": ["SOL/USDC", null, 1, {"page": 2}]
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?aid=42&mi=1&mt=S&page=2&pageSize=1",
+                "input": ["SOL/USDC", null, 1, {"page": 2, "accountId": "42"}]
             }
         ],
         "fetchClosedOrders": [
             {
                 "description": "fetchClosedOrders requests filled historical orders",
                 "method": "fetchClosedOrders",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?user=wallet&mi=1&mt=S&status=F",
-                "input": ["SOL/USDC"]
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?aid=42&mi=1&mt=S&status=F",
+                "input": ["SOL/USDC", null, null, {"accountId": "42"}]
             }
         ],
         "fetchCanceledOrders": [
             {
                 "description": "fetchCanceledOrders requests canceled historical orders",
                 "method": "fetchCanceledOrders",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?user=wallet&mi=1&mt=S&status=C",
-                "input": ["SOL/USDC"]
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?aid=42&mi=1&mt=S&status=C",
+                "input": ["SOL/USDC", null, null, {"accountId": "42"}]
             }
         ],
         "fetchTradingFee": [
@@ -157,8 +163,8 @@
             {
                 "description": "fetchFundingHistory converts millisecond bounds to seconds",
                 "method": "fetchFundingHistory",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/user-funding-history?user=wallet&startTime=1783763617&endTime=1783767217",
-                "input": ["SOL/USDC:USDC", 1783763617000, 10, {"until": 1783767217000}]
+                "url": "https://fb-4b8448ac.alephium.org/api/v1/user-funding-history?aid=42&startTime=1783763617&endTime=1783767217",
+                "input": ["SOL/USDC:USDC", 1783763617000, 10, {"until": 1783767217000, "accountId": "42"}]
             }
         ]
     },
