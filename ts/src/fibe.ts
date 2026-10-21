@@ -8,7 +8,7 @@ import { eddsa } from './base/functions/crypto.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { Precise } from './base/Precise.js';
-import type { Balances, Dict, FundingHistory, FundingRate, FundingRates, Market, Num, OHLCV, Order, OrderBook, OrderSide, OrderType, Position, Strings, Ticker, Tickers, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
+import type { Balances, Dict, FundingHistory, FundingRate, FundingRates, List, Market, Num, OHLCV, OpenInterest, Order, OrderBook, OrderSide, OrderType, Position, Strings, Ticker, Tickers, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -18,7 +18,7 @@ import type { Balances, Dict, FundingHistory, FundingRate, FundingRates, Market,
  * Fibe — Solana on-chain orderbook DEX (spot + perp).
  */
 export default class fibe extends Exchange {
-    describe (): any {
+    override describe (): any {
         return this.deepExtend (super.describe (), {
             'id': 'fibe',
             'name': 'Fibe',
@@ -264,7 +264,7 @@ export default class fibe extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object[]} an array of objects representing market data
      */
-    async fetchMarkets (params = {}): Promise<Market[]> {
+    override async fetchMarkets (params = {}): Promise<Market[]> {
         const response = await this.publicGetMarkets (params);
         //
         //     [
@@ -286,9 +286,12 @@ export default class fibe extends Exchange {
         return this.parseMarkets (response);
     }
 
-    parseMarket (market: Dict): Market {
+    override parseMarket (market: Dict): Market {
         // spot symbols are "BASE/USDC", perp symbols are "BASE-USDC"
         const marketSymbol = this.safeString (market, 'symbol');
+        if (marketSymbol === undefined) {
+            throw new ExchangeError (this.id + ' market is missing a symbol');
+        }
         let separator = '/';
         if (marketSymbol.indexOf ('/') < 0) {
             separator = '-';
@@ -316,7 +319,7 @@ export default class fibe extends Exchange {
             symbol = symbol + ':' + settle;
             type = 'swap';
         }
-        const baseDecimals = this.safeInteger (market, 'baseDecimals');
+        const baseDecimals: any = this.safeInteger (market, 'baseDecimals');
         const quoteDecimals = this.safeInteger (market, 'quoteDecimals');
         // TICK_SIZE wants human decimal units: raw on-chain units * 10**-decimals
         const amountPrecision = this.parseNumber (Precise.stringMul (this.safeString (market, 'lotSizeInBaseBaseUnits'), this.parsePrecision (this.numberToString (baseDecimals))));
@@ -387,7 +390,7 @@ export default class fibe extends Exchange {
      * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @returns {object} a [balance structure]{@link https://docs.ccxt.com/#/?id=balance-structure}
      */
-    async fetchBalance (params = {}): Promise<Balances> {
+    override async fetchBalance (params = {}): Promise<Balances> {
         let accountId = undefined;
         const accountIdResponse = await this.fibeAccountId ('fetchBalance', params);
         [ accountId, params ] = accountIdResponse;
@@ -409,6 +412,9 @@ export default class fibe extends Exchange {
             const balance = balances[i];
             const currencyId = this.safeString (balance, 'symbol');
             const code = this.safeCurrencyCode (currencyId);
+            if (code === undefined) {
+                continue;
+            }
             const account = this.account ();
             account['used'] = this.safeString (balance, 'hold');
             result[code] = account;
@@ -428,16 +434,17 @@ export default class fibe extends Exchange {
      * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @returns {object[]} a list of [position structures]{@link https://docs.ccxt.com/#/?id=position-structure}
      */
-    async fetchPositions (symbols: Strings = undefined, params = {}): Promise<Position[]> {
+    override async fetchPositions (symbols: Strings = undefined, params = {}): Promise<Position[]> {
+        let requestParams = params;
         let accountId = undefined;
-        const accountIdResponse = await this.fibeAccountId ('fetchPositions', params);
-        [ accountId, params ] = accountIdResponse;
+        const accountIdResponse = await this.fibeAccountId ('fetchPositions', requestParams);
+        [ accountId, requestParams ] = accountIdResponse;
         await this.loadMarkets ();
-        symbols = this.marketSymbols (symbols, 'swap');
+        const marketSymbols = this.marketSymbols (symbols, 'swap');
         const request: Dict = {
             'aid': accountId,
         };
-        const response = await this.publicGetAllClearinghouseState (this.extend (request, params));
+        const response = await this.publicGetAllClearinghouseState (this.extend (request, requestParams));
         //
         //     {
         //         "aid": "42",
@@ -478,7 +485,7 @@ export default class fibe extends Exchange {
                 result.push (this.parsePosition (position));
             }
         }
-        return this.filterByArrayPositions (result, 'symbol', symbols, false);
+        return this.filterByArrayPositions (result, 'symbol', marketSymbols);
     }
 
     /**
@@ -493,12 +500,12 @@ export default class fibe extends Exchange {
      * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @returns {object} a [position structure]{@link https://docs.ccxt.com/#/?id=position-structure}
      */
-    async fetchPosition (symbol: string, params = {}): Promise<Position> {
+    override async fetchPosition (symbol: string, params = {}): Promise<Position> {
         const positions = await this.fetchPositions ([ symbol ], params);
         return this.safeDict (positions, 0, {}) as Position;
     }
 
-    parsePosition (position: Dict, market: Market = undefined): Position {
+    override parsePosition (position: Dict, market: Market = undefined): Position {
         //
         //     {
         //         "accountId": "42",
@@ -522,7 +529,7 @@ export default class fibe extends Exchange {
         if (mi !== undefined) {
             marketId = 'perp:' + mi;
         }
-        market = this.safeMarket (marketId, market);
+        const marketResolved = this.safeMarket (marketId, market);
         const leverage = this.safeDict (position, 'leverage', {});
         const marginMode = this.safeString (leverage, 'type');
         const size = this.safeString (position, 'szi');
@@ -541,11 +548,11 @@ export default class fibe extends Exchange {
         return this.safePosition ({
             'info': position,
             'id': undefined,
-            'symbol': market['symbol'],
+            'symbol': marketResolved['symbol'],
             'timestamp': undefined,
             'datetime': undefined,
             'contracts': this.parseNumber (Precise.stringAbs (size)),
-            'contractSize': this.safeNumber (market, 'contractSize'),
+            'contractSize': this.safeNumber (marketResolved, 'contractSize'),
             'side': side,
             'notional': this.safeNumber (position, 'positionValue'),
             'leverage': this.safeNumber (leverage, 'value'),
@@ -585,16 +592,18 @@ export default class fibe extends Exchange {
      * @param {int} [params.until] the latest time in ms to fetch funding history for
      * @returns {object[]} a list of [funding history structures]{@link https://docs.ccxt.com/#/?id=funding-history-structure}
      */
-    async fetchFundingHistory (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<FundingHistory[]> {
+    override async fetchFundingHistory (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<FundingHistory[]> {
         await this.loadMarkets ();
-        if (symbol !== undefined) {
-            symbol = this.market (symbol)['symbol'];
+        let marketSymbol = symbol;
+        if (marketSymbol !== undefined) {
+            marketSymbol = this.market (marketSymbol)['symbol'];
         }
+        let requestParams = params;
         let accountId = undefined;
-        const accountIdResponse = await this.fibeAccountId ('fetchFundingHistory', params);
-        [ accountId, params ] = accountIdResponse;
+        const accountIdResponse = await this.fibeAccountId ('fetchFundingHistory', requestParams);
+        [ accountId, requestParams ] = accountIdResponse;
         let until: Int = undefined;
-        [ until, params ] = this.handleOptionAndParams (params, 'fetchFundingHistory', 'until');
+        [ until, requestParams ] = this.handleOptionAndParams (requestParams, 'fetchFundingHistory', 'until');
         let startTime = 0;
         if (since !== undefined) {
             startTime = this.parseToInt (since / 1000);
@@ -606,12 +615,12 @@ export default class fibe extends Exchange {
         if (until !== undefined) {
             request['endTime'] = this.parseToInt (until / 1000);
         }
-        const response = await this.publicGetUserFundingHistory (this.extend (request, params));
+        const response = await this.publicGetUserFundingHistory (this.extend (request, requestParams));
         const fundingHistory = this.parseIncomes (response);
-        return this.filterBySymbolSinceLimit (fundingHistory, symbol, since, limit) as FundingHistory[];
+        return this.filterBySymbolSinceLimit (fundingHistory, marketSymbol, since, limit) as FundingHistory[];
     }
 
-    parseIncome (income, market: Market = undefined) {
+    override parseIncome (income: Dict, market: Market = undefined) {
         //
         //     {
         //         "time": 1781672400,
@@ -632,12 +641,12 @@ export default class fibe extends Exchange {
             }
             marketId = idPrefix + mi;
         }
-        market = this.safeMarket (marketId, market);
+        const marketResolved = this.safeMarket (marketId, market);
         const timestamp = this.safeTimestamp (income, 'time');
         return {
             'info': income,
-            'symbol': market['symbol'],
-            'code': this.safeString (market, 'settle', 'USDC'),
+            'symbol': marketResolved['symbol'],
+            'code': this.safeString (marketResolved, 'settle', 'USDC'),
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
             'id': undefined,
@@ -654,7 +663,7 @@ export default class fibe extends Exchange {
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
      * @returns {object} a dictionary of [fee structures]{@link https://docs.ccxt.com/#/?id=fee-structure} indexed by market symbols
      */
-    async fetchTradingFees (params = {}): Promise<TradingFees> {
+    override async fetchTradingFees (params = {}): Promise<TradingFees> {
         let userAddress = undefined;
         [ userAddress, params ] = this.handlePublicAddress ('fetchTradingFees', params);
         await this.loadMarkets ();
@@ -677,7 +686,7 @@ export default class fibe extends Exchange {
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
      * @returns {object} a [fee structure]{@link https://docs.ccxt.com/#/?id=fee-structure}
      */
-    async fetchTradingFee (symbol: string, params = {}): Promise<TradingFeeInterface> {
+    override async fetchTradingFee (symbol: string, params = {}): Promise<TradingFeeInterface> {
         let userAddress = undefined;
         [ userAddress, params ] = this.handlePublicAddress ('fetchTradingFee', params);
         await this.loadMarkets ();
@@ -709,7 +718,7 @@ export default class fibe extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a [ticker structure]{@link https://docs.ccxt.com/#/?id=ticker-structure}
      */
-    async fetchTicker (symbol: string, params = {}): Promise<Ticker> {
+    override async fetchTicker (symbol: string, params = {}): Promise<Ticker> {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const info = market['info'];
@@ -717,7 +726,7 @@ export default class fibe extends Exchange {
             'mi': this.safeString (info, 'mi'),
         };
         let response = undefined;
-        if (market['spot']) {
+        if (market['spot'] === true) {
             response = await this.publicGetSpotAssetCtx (this.extend (request, params));
         } else {
             response = await this.publicGetPerpAssetCtx (this.extend (request, params));
@@ -735,15 +744,20 @@ export default class fibe extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a dictionary of [ticker structures]{@link https://docs.ccxt.com/#/?id=ticker-structure}
      */
-    async fetchTickers (symbols: Strings = undefined, params = {}): Promise<Tickers> {
+    override async fetchTickers (symbols: Strings = undefined, params = {}): Promise<Tickers> {
         await this.loadMarkets ();
-        symbols = this.marketSymbols (symbols);
+        let marketSymbols: string[] = [];
         if (symbols === undefined) {
-            symbols = Object.keys (this.markets);
+            marketSymbols = this.symbols;
+        } else {
+            marketSymbols = this.marketSymbols (symbols);
         }
-        const result = {};
-        for (let i = 0; i < symbols.length; i++) {
-            const symbol = symbols[i];
+        const result: Tickers = {};
+        for (let i = 0; i < marketSymbols.length; i++) {
+            const symbol = marketSymbols[i];
+            if (symbol === undefined) {
+                continue;
+            }
             const ticker = await this.fetchTicker (symbol, params);
             result[symbol] = ticker;
         }
@@ -758,7 +772,7 @@ export default class fibe extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a dictionary of [ticker structures]{@link https://docs.ccxt.com/#/?id=ticker-structure}
      */
-    async fetchBidsAsks (symbols: Strings = undefined, params = {}): Promise<Tickers> {
+    override async fetchBidsAsks (symbols: Strings = undefined, params = {}): Promise<Tickers> {
         return await this.fetchTickers (symbols, params);
     }
 
@@ -771,16 +785,16 @@ export default class fibe extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a [ticker structure]{@link https://docs.ccxt.com/#/?id=ticker-structure}
      */
-    async fetchMarkPrice (symbol: string, params = {}): Promise<Ticker> {
+    override async fetchMarkPrice (symbol: string, params = {}): Promise<Ticker> {
         await this.loadMarkets ();
         const market = this.market (symbol);
-        if (!market['swap']) {
+        if (market['swap'] !== true) {
             throw new ExchangeError (this.id + ' fetchMarkPrice() is only valid for swap markets');
         }
         return await this.fetchTicker (symbol, params);
     }
 
-    parseTicker (ticker: Dict, market: Market = undefined): Ticker {
+    override parseTicker (ticker: Dict, market: Market = undefined): Ticker {
         //
         //     {
         //         "midPx": "8.4557",
@@ -838,10 +852,10 @@ export default class fibe extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} an [open interest structure]{@link https://docs.ccxt.com/#/?id=open-interest-structure}
      */
-    async fetchOpenInterest (symbol: string, params = {}) {
+    override async fetchOpenInterest (symbol: string, params = {}): Promise<OpenInterest> {
         await this.loadMarkets ();
         const market = this.market (symbol);
-        if (!market['swap']) {
+        if (market['swap'] !== true) {
             throw new ExchangeError (this.id + ' fetchOpenInterest() is only valid for swap markets');
         }
         const info = market['info'];
@@ -852,7 +866,7 @@ export default class fibe extends Exchange {
         return this.parseOpenInterest (response, market);
     }
 
-    parseOpenInterest (interest, market: Market = undefined) {
+    override parseOpenInterest (interest: any, market: Market = undefined): OpenInterest {
         const openInterest = this.safeString (interest, 'openInterest');
         const markPrice = this.safeString (interest, 'markPx');
         let openInterestValue = undefined;
@@ -878,10 +892,10 @@ export default class fibe extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a [funding rate structure]{@link https://docs.ccxt.com/#/?id=funding-rate-structure}
      */
-    async fetchFundingRate (symbol: string, params = {}): Promise<FundingRate> {
+    override async fetchFundingRate (symbol: string, params = {}): Promise<FundingRate> {
         await this.loadMarkets ();
         const market = this.market (symbol);
-        if (!market['swap']) {
+        if (market['swap'] !== true) {
             throw new ExchangeError (this.id + ' fetchFundingRate() is only valid for swap markets');
         }
         const info = market['info'];
@@ -901,28 +915,37 @@ export default class fibe extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a dictionary of [funding rates structures]{@link https://docs.ccxt.com/#/?id=funding-rates-structure}
      */
-    async fetchFundingRates (symbols: Strings = undefined, params = {}): Promise<FundingRates> {
+    override async fetchFundingRates (symbols: Strings = undefined, params = {}): Promise<FundingRates> {
         await this.loadMarkets ();
-        symbols = this.marketSymbols (symbols, 'swap');
+        let marketSymbols: string[] = [];
         if (symbols === undefined) {
-            symbols = [];
-            const marketSymbols = Object.keys (this.markets);
-            for (let i = 0; i < marketSymbols.length; i++) {
-                const symbol = marketSymbols[i];
-                if (this.markets[symbol]['swap']) {
-                    symbols.push (symbol);
+            const allSymbols = this.symbols;
+            for (let i = 0; i < allSymbols.length; i++) {
+                const symbol = allSymbols[i];
+                if (symbol === undefined) {
+                    continue;
+                }
+                const market = this.market (symbol);
+                if (market['swap'] === true) {
+                    marketSymbols.push (symbol);
                 }
             }
+        } else {
+            marketSymbols = this.marketSymbols (symbols, 'swap');
         }
-        const result = {};
-        for (let i = 0; i < symbols.length; i++) {
-            const fundingRate = await this.fetchFundingRate (symbols[i], params);
-            result[symbols[i]] = fundingRate;
+        const result: FundingRates = {};
+        for (let i = 0; i < marketSymbols.length; i++) {
+            const symbol = this.safeString (marketSymbols, i);
+            if (symbol === undefined) {
+                continue;
+            }
+            const fundingRate = await this.fetchFundingRate (symbol, params);
+            result[symbol] = fundingRate;
         }
         return result;
     }
 
-    parseFundingRate (contract: any, market: Market = undefined): FundingRate {
+    override parseFundingRate (contract: any, market: Market = undefined): FundingRate {
         //
         //     {
         //         "midPx": "1730",
@@ -966,12 +989,12 @@ export default class fibe extends Exchange {
      * @param {int} [params.mantissa] price aggregation mantissa, valid values are 1, 2, or 5 and require nSigFigs to be 5
      * @returns {object} an order book structure
      */
-    async fetchOrderBook (symbol: string, limit: Int = undefined, params = {}): Promise<OrderBook> {
+    override async fetchOrderBook (symbol: string, limit: Int = undefined, params = {}): Promise<OrderBook> {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const info = market['info'];
         let mt = 'P';
-        if (market['spot']) {
+        if (market['spot'] === true) {
             mt = 'S';
         }
         const request: Dict = {
@@ -1012,12 +1035,12 @@ export default class fibe extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {Trade[]} a list of [trade structures]{@link https://docs.ccxt.com/#/?id=public-trades}
      */
-    async fetchTrades (symbol: string, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
+    override async fetchTrades (symbol: string, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const info = market['info'];
         let mt = 'P';
-        if (market['spot']) {
+        if (market['spot'] === true) {
             mt = 'S';
         }
         const request: Dict = {
@@ -1025,7 +1048,7 @@ export default class fibe extends Exchange {
             'mt': mt,
         };
         const response = await this.publicGetRecentMarketTrades (this.extend (request, params));
-        return this.parseTrades (response, market, since, limit);
+        return this.parseTrades (response as List, market, since, limit);
     }
 
     /**
@@ -1043,7 +1066,7 @@ export default class fibe extends Exchange {
      * @param {int} [params.until] timestamp in ms of the latest trade to fetch
      * @returns {Trade[]} a list of [trade structures]{@link https://docs.ccxt.com/#/?id=trade-structure}
      */
-    async fetchMyTrades (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
+    override async fetchMyTrades (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
         let accountId = undefined;
         const accountIdResponse = await this.fibeAccountId ('fetchMyTrades', params);
         [ accountId, params ] = accountIdResponse;
@@ -1070,7 +1093,7 @@ export default class fibe extends Exchange {
             request['limit'] = limit;
         }
         const response = await this.publicGetUserTrades (this.extend (request, params));
-        let trades = this.parseTrades (response, market, since, undefined);
+        let trades = this.parseTrades (response as List, market, since, undefined);
         if (until !== undefined) {
             const filtered = [];
             for (let i = 0; i < trades.length; i++) {
@@ -1085,7 +1108,7 @@ export default class fibe extends Exchange {
         return this.filterBySinceLimit (trades, since, limit) as Trade[];
     }
 
-    parseTrade (trade: Dict, market: Market = undefined): Trade {
+    override parseTrade (trade: Dict, market: Market = undefined): Trade {
         //
         //     {
         //         "mi": "1",
@@ -1108,16 +1131,16 @@ export default class fibe extends Exchange {
             }
             marketId = idPrefix + mi;
         }
-        market = this.safeMarket (marketId, market);
+        const marketResolved = this.safeMarket (marketId, market);
         const timestamp = this.safeTimestamp (trade, 'time');
         const side = this.parseSide (this.safeString (trade, 'side'));
         const takerOrMaker = this.safeString (trade, 'takerOrMaker');
         const feeToken = this.safeString (trade, 'feeToken');
         let feeCurrency = undefined;
         if (feeToken === 'base') {
-            feeCurrency = market['base'];
+            feeCurrency = marketResolved['base'];
         } else if (feeToken === 'quote') {
-            feeCurrency = market['quote'];
+            feeCurrency = marketResolved['quote'];
         }
         const feeCost = this.safeString (trade, 'feeAmount');
         let fee = undefined;
@@ -1132,7 +1155,7 @@ export default class fibe extends Exchange {
             'id': undefined,
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
-            'symbol': market['symbol'],
+            'symbol': marketResolved['symbol'],
             'order': this.safeString (trade, 'oid'),
             'type': this.parseOrderType (this.safeString (trade, 'type')),
             'side': side,
@@ -1141,7 +1164,7 @@ export default class fibe extends Exchange {
             'amount': this.safeString (trade, 'sz'),
             'cost': this.safeString (trade, 'tradeValue'),
             'fee': fee,
-        }, market);
+        }, marketResolved);
     }
 
     /**
@@ -1157,8 +1180,9 @@ export default class fibe extends Exchange {
      * @param {int} [params.until] timestamp in ms of the latest candle to fetch
      * @returns {int[][]} A list of candles ordered as timestamp, open, high, low, close, volume
      */
-    async fetchOHLCV (symbol: string, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params = {}): Promise<OHLCV[]> {
+    override async fetchOHLCV (symbol: string, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params = {}): Promise<OHLCV[]> {
         await this.loadMarkets ();
+        let requestParams = params;
         const market = this.market (symbol);
         const info = market['info'];
         const duration = this.parseTimeframe (timeframe);
@@ -1167,7 +1191,7 @@ export default class fibe extends Exchange {
             requestLimit = 100;
         }
         let until: Int = undefined;
-        [ until, params ] = this.handleOptionAndParams (params, 'fetchOHLCV', 'until');
+        [ until, requestParams ] = this.handleOptionAndParams (requestParams, 'fetchOHLCV', 'until');
         let endTimestamp = this.seconds ();
         if (until !== undefined) {
             endTimestamp = this.parseToInt (until / 1000);
@@ -1180,7 +1204,7 @@ export default class fibe extends Exchange {
             }
         }
         let mt = 'P';
-        if (market['spot']) {
+        if (market['spot'] === true) {
             mt = 'S';
         }
         const request: Dict = {
@@ -1190,11 +1214,11 @@ export default class fibe extends Exchange {
             'endTimestamp': endTimestamp,
             'interval': this.safeString (this.timeframes, timeframe, timeframe),
         };
-        const response = await this.publicGetCandles (this.extend (request, params));
-        return this.parseOHLCVs (response, market, timeframe, since, requestLimit);
+        const response = await this.publicGetCandles (this.extend (request, requestParams));
+        return this.parseOHLCVs (response as List, market, timeframe, since, requestLimit);
     }
 
-    parseOHLCV (ohlcv, market: Market = undefined): OHLCV {
+    override parseOHLCV (ohlcv: any, market: Market = undefined): OHLCV {
         //
         //     {
         //         "mi": "1",
@@ -1233,7 +1257,7 @@ export default class fibe extends Exchange {
      * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @returns {Order} an [order structure]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
-    async fetchOrder (id: string, symbol: Str = undefined, params = {}): Promise<Order> {
+    override async fetchOrder (id: string, symbol: Str = undefined, params = {}): Promise<Order> {
         if (symbol === undefined) {
             throw new ArgumentsRequired (this.id + ' fetchOrder() requires a symbol');
         }
@@ -1268,10 +1292,11 @@ export default class fibe extends Exchange {
      * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
-    async fetchOpenOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
+    override async fetchOpenOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
+        let requestParams = params;
         let accountId = undefined;
-        const accountIdResponse = await this.fibeAccountId ('fetchOpenOrders', params);
-        [ accountId, params ] = accountIdResponse;
+        const accountIdResponse = await this.fibeAccountId ('fetchOpenOrders', requestParams);
+        [ accountId, requestParams ] = accountIdResponse;
         await this.loadMarkets ();
         let market = undefined;
         if (symbol !== undefined) {
@@ -1285,7 +1310,7 @@ export default class fibe extends Exchange {
             request['mi'] = this.safeString (info, 'mi');
             request['mt'] = this.safeString (info, 'mt');
         }
-        const response = await this.publicGetOpenOrders (this.extend (request, params));
+        const response = await this.publicGetOpenOrders (this.extend (request, requestParams));
         const orders = this.parseOrders (response, undefined, since, undefined);
         return this.filterBySymbolSinceLimit (orders, symbol, since, limit) as Order[];
     }
@@ -1307,20 +1332,21 @@ export default class fibe extends Exchange {
      * @param {int} [params.pageSize] page size, defaults to limit when provided
      * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
-    async fetchOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
+    override async fetchOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
+        let requestParams = params;
         let accountId = undefined;
-        const accountIdResponse = await this.fibeAccountId ('fetchOrders', params);
-        [ accountId, params ] = accountIdResponse;
+        const accountIdResponse = await this.fibeAccountId ('fetchOrders', requestParams);
+        [ accountId, requestParams ] = accountIdResponse;
         await this.loadMarkets ();
         let market = undefined;
         if (symbol !== undefined) {
             market = this.market (symbol);
         }
         let page = undefined;
-        [ page, params ] = this.handleOptionAndParams (params, 'fetchOrders', 'page');
+        [ page, requestParams ] = this.handleOptionAndParams (requestParams, 'fetchOrders', 'page');
         let pageSize = undefined;
         const defaultPageSize = limit;
-        [ pageSize, params ] = this.handleOptionAndParams (params, 'fetchOrders', 'pageSize', defaultPageSize);
+        [ pageSize, requestParams ] = this.handleOptionAndParams (requestParams, 'fetchOrders', 'pageSize', defaultPageSize);
         const request: Dict = {
             'aid': accountId,
         };
@@ -1335,7 +1361,7 @@ export default class fibe extends Exchange {
         if (pageSize !== undefined) {
             request['pageSize'] = pageSize;
         }
-        const response = await this.publicGetHistoricalOrders (this.extend (request, params));
+        const response = await this.publicGetHistoricalOrders (this.extend (request, requestParams));
         const orders = this.parseOrders (response, undefined, since, undefined);
         return this.filterBySymbolSinceLimit (orders, symbol, since, limit) as Order[];
     }
@@ -1354,7 +1380,7 @@ export default class fibe extends Exchange {
      * @param {int} [params.pageSize] page size
      * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
-    async fetchClosedOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
+    override async fetchClosedOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
         params = this.extend (params, { 'status': 'F' });
         return await this.fetchOrders (symbol, since, limit, params);
     }
@@ -1373,7 +1399,7 @@ export default class fibe extends Exchange {
      * @param {int} [params.pageSize] page size
      * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
-    async fetchCanceledOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
+    override async fetchCanceledOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
         params = this.extend (params, { 'status': 'C' });
         return await this.fetchOrders (symbol, since, limit, params);
     }
@@ -1383,7 +1409,11 @@ export default class fibe extends Exchange {
          * @method
          * @ignore
          */
-        const allMids = await this.publicGetAllMids ();
+        if (market === undefined) {
+            throw new ExchangeError (this.id + ' createOrder() requires a market');
+        }
+        const response = await this.publicGetAllMids ();
+        const allMids = response as List;
         const marketInfo = market['info'];
         const mi = this.safeString (marketInfo, 'mi');
         const mt = this.safeString (marketInfo, 'mt');
@@ -1755,13 +1785,14 @@ export default class fibe extends Exchange {
      * @param {object} [params] extra parameters specific to the exchange API endpoint, same as cancelOrder()
      * @returns {Order[]} a list of order structures
      */
-    async cancelOrders (ids: string[], symbol: Str = undefined, params = {}): Promise<Order[]> {
+    override async cancelOrders (ids: string[], symbol: Str = undefined, params = {}): Promise<Order[]> {
         if (symbol === undefined) {
             throw new ArgumentsRequired (this.id + ' cancelOrders() requires a symbol');
         }
         const orders = [];
         for (let i = 0; i < ids.length; i++) {
-            const order = await this.cancelOrder (ids[i], symbol, this.extend ({}, params));
+            const id = this.safeString (ids, i) as string;
+            const order = await this.cancelOrder (id, symbol, this.extend ({}, params));
             orders.push (order);
         }
         return orders;
@@ -1776,25 +1807,26 @@ export default class fibe extends Exchange {
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
      * @returns {Order[]} a list of order structures
      */
-    async cancelAllOrders (symbol: Str = undefined, params = {}): Promise<Order[]> {
+    override async cancelAllOrders (symbol: Str = undefined, params = {}): Promise<Order[]> {
         if (symbol === undefined) {
             throw new ArgumentsRequired (this.id + ' cancelAllOrders() requires a symbol');
         }
+        let requestParams = params;
         const fetchOpenOrdersParams: Dict = {};
-        const user = this.safeString2 (params, 'user', 'address');
+        const user = this.safeString2 (requestParams, 'user', 'address');
         if (user !== undefined) {
             fetchOpenOrdersParams['user'] = user;
         }
-        const accountId = this.safeString (params, 'accountId');
+        const accountId = this.safeString (requestParams, 'accountId');
         if (accountId !== undefined) {
             fetchOpenOrdersParams['accountId'] = accountId;
         }
-        const subAccountIndex = this.safeInteger (params, 'subAccountIndex');
+        const subAccountIndex = this.safeInteger (requestParams, 'subAccountIndex');
         if (subAccountIndex !== undefined) {
             fetchOpenOrdersParams['subAccountIndex'] = subAccountIndex;
         }
         const openOrders = await this.fetchOpenOrders (symbol, undefined, undefined, fetchOpenOrdersParams);
-        params = this.omit (params, 'accountId');
+        requestParams = this.omit (requestParams, 'accountId');
         const ids = [];
         for (let i = 0; i < openOrders.length; i++) {
             const id = this.safeString (openOrders[i], 'id');
@@ -1803,10 +1835,10 @@ export default class fibe extends Exchange {
             }
             ids.push (id);
         }
-        return await this.cancelOrders (ids, symbol, params);
+        return await this.cancelOrders (ids, symbol, requestParams);
     }
 
-    parseOrder (order: Dict, market: Market = undefined): Order {
+    override parseOrder (order: Dict, market: Market = undefined): Order {
         //
         //     {
         //         "mi": "1",
@@ -2083,8 +2115,8 @@ export default class fibe extends Exchange {
         return result;
     }
 
-    solanaLeHexToDecimalString (hex) {
-        let result = '0';
+    solanaLeHexToDecimalString (hex: string): any {
+        let result: any = '0';
         let i = hex.length - 2;
         while (i >= 0) {
             const byteValue = this.solanaHexByte (hex, i);
@@ -2431,7 +2463,7 @@ export default class fibe extends Exchange {
         return 150;
     }
 
-    solanaReadU64FromHex (hex, offset) {
+    solanaReadU64FromHex (hex: string, offset: number): string {
         const start = offset * 2;
         return this.solanaLeHexToDecimalString (hex.slice (start, start + 16));
     }
@@ -3495,11 +3527,13 @@ export default class fibe extends Exchange {
         return [ accountId, params ];
     }
 
-    sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
+    override sign (path: string, api: string[] = [ 'public' ], method = 'GET', params: Dict = {}): Dict {
+        let headers: any = undefined;
+        let body: any = undefined;
         let url = this.urls['api']['rest'] + '/' + path;
         const query = this.urlencode (params);
         if (method === 'GET') {
-            if (query.length) {
+            if (query.length !== 0) {
                 url += '?' + query;
             }
         } else {
@@ -3511,7 +3545,7 @@ export default class fibe extends Exchange {
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
     }
 
-    handleErrors (code: int, reason: string, url: string, method: string, headers: Dict, body: string, response, requestHeaders, requestBody) {
+    override handleErrors (code: int, reason: string, url: string, method: string, headers: Dict, body: string, response: any, requestHeaders: any, requestBody: any) {
         if (response === undefined) {
             return undefined;
         }

@@ -580,15 +580,16 @@
                         "marginMode": "cross",
                         "hedged": null,
                         "maintenanceMargin": 4,
-                        "maintenanceMarginPercentage": null,
+                        "maintenanceMarginPercentage": 0.05,
                         "initialMargin": 16,
-                        "initialMarginPercentage": null,
-                        "marginRatio": null,
+                        "initialMarginPercentage": 0.2,
+                        "marginRatio": 0.25,
                         "lastUpdateTimestamp": null,
                         "lastPrice": null,
                         "stopLossPrice": null,
                         "takeProfitPrice": null,
-                        "percentage": 10
+                        "percentage": 10,
+                        "positionMargin": null
                     }
                 ]
             }
