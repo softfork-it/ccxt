@@ -7,13 +7,13 @@
             {
                 "description": "fetchBalance resolves the wallet subaccount to an account id",
                 "method": "fetchBalance",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/account-id?owner=wallet&subAccountIndex=0",
+                "url": "https://api.devnet.fibe.trade/api/v1/account-id?owner=wallet&subAccountIndex=0",
                 "input": []
             },
             {
                 "description": "fetchBalance requests balances by account id",
                 "method": "fetchBalance",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/spot-state?aid=42",
+                "url": "https://api.devnet.fibe.trade/api/v1/spot-state?aid=42",
                 "input": [{"accountId": "42", "user": "ignored-owner"}]
             }
         ],
@@ -21,7 +21,7 @@
             {
                 "description": "fetchPositions maps the wallet address",
                 "method": "fetchPositions",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state?aid=42",
+                "url": "https://api.devnet.fibe.trade/api/v1/all-clearinghouse-state?aid=42",
                 "input": [null, {"accountId": "42"}]
             }
         ],
@@ -29,7 +29,7 @@
             {
                 "description": "fetchPosition filters positions by symbol",
                 "method": "fetchPosition",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state?aid=42",
+                "url": "https://api.devnet.fibe.trade/api/v1/all-clearinghouse-state?aid=42",
                 "input": ["SOL/USDC:USDC", {"accountId": "42"}]
             }
         ],
@@ -37,7 +37,7 @@
             {
                 "description": "fetchTicker maps a spot symbol to its market index",
                 "method": "fetchTicker",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/spot-asset-ctx?mi=1",
+                "url": "https://api.devnet.fibe.trade/api/v1/spot-asset-ctx?mi=1",
                 "input": ["SOL/USDC"]
             }
         ],
@@ -45,7 +45,7 @@
             {
                 "description": "fetchBidsAsks reuses market ticker requests",
                 "method": "fetchBidsAsks",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/spot-asset-ctx?mi=1",
+                "url": "https://api.devnet.fibe.trade/api/v1/spot-asset-ctx?mi=1",
                 "input": [["SOL/USDC"]]
             }
         ],
@@ -53,7 +53,7 @@
             {
                 "description": "fetchMarkPrice requests a perpetual asset context",
                 "method": "fetchMarkPrice",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx?mi=1",
+                "url": "https://api.devnet.fibe.trade/api/v1/perp-asset-ctx?mi=1",
                 "input": ["SOL/USDC:USDC"]
             }
         ],
@@ -61,7 +61,7 @@
             {
                 "description": "fetchOpenInterest maps a perpetual symbol to its market index",
                 "method": "fetchOpenInterest",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx?mi=1",
+                "url": "https://api.devnet.fibe.trade/api/v1/perp-asset-ctx?mi=1",
                 "input": ["SOL/USDC:USDC"]
             }
         ],
@@ -69,7 +69,7 @@
             {
                 "description": "fetchFundingRate maps a swap symbol to its market index",
                 "method": "fetchFundingRate",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx?mi=1",
+                "url": "https://api.devnet.fibe.trade/api/v1/perp-asset-ctx?mi=1",
                 "input": ["SOL/USDC:USDC"]
             }
         ],
@@ -77,7 +77,7 @@
             {
                 "description": "fetchOrderBook maps symbol, market type, and aggregation",
                 "method": "fetchOrderBook",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/l2book?mi=1&mt=S&nSigFigs=5&mantissa=2",
+                "url": "https://api.devnet.fibe.trade/api/v1/l2book?mi=1&mt=S&nSigFigs=5&mantissa=2",
                 "input": ["SOL/USDC", 2, {"nSigFigs": 5, "mantissa": 2}]
             }
         ],
@@ -85,7 +85,7 @@
             {
                 "description": "fetchTrades maps a spot symbol to market type and index",
                 "method": "fetchTrades",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/recent-market-trades?mi=1&mt=S",
+                "url": "https://api.devnet.fibe.trade/api/v1/recent-market-trades?mi=1&mt=S",
                 "input": ["SOL/USDC"]
             }
         ],
@@ -93,7 +93,7 @@
             {
                 "description": "fetchMyTrades maps the wallet, symbol, and time bounds",
                 "method": "fetchMyTrades",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/user-trades?aid=42&mi=1&mt=S&startTime=1783763617&endTime=1783767217&limit=25",
+                "url": "https://api.devnet.fibe.trade/api/v1/user-fills?aid=42&mi=1&mt=S&startTime=1783763617&endTime=1783767217&limit=25",
                 "input": ["SOL/USDC", 1783763617000, 25, {"until": 1783767217000, "accountId": "42"}]
             }
         ],
@@ -101,13 +101,13 @@
             {
                 "description": "fetchOHLCV maps the market and fixed time range",
                 "method": "fetchOHLCV",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/candles?mi=1&mt=S&startTimestamp=1783763617&endTimestamp=1783763737&interval=1m",
+                "url": "https://api.devnet.fibe.trade/api/v1/candles?mi=1&mt=S&startTimestamp=1783763617&endTimestamp=1783763737&interval=1m",
                 "input": ["SOL/USDC", "1m", 1783763617000, 2, {"until": 1783763737000}]
             },
             {
                 "description": "fetchOHLCV defaults to a 100-candle range",
                 "method": "fetchOHLCV",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/candles?mi=1&mt=S&startTimestamp=1783763617&endTimestamp=1783769617&interval=1m",
+                "url": "https://api.devnet.fibe.trade/api/v1/candles?mi=1&mt=S&startTimestamp=1783763617&endTimestamp=1783769617&interval=1m",
                 "input": ["SOL/USDC", "1m", 1783763617000]
             }
         ],
@@ -115,15 +115,21 @@
             {
                 "description": "fetchOrder maps the full order identity",
                 "method": "fetchOrder",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/order?aid=42&orderId=42&mi=1&mt=S",
+                "url": "https://api.devnet.fibe.trade/api/v1/order?aid=42&mi=1&mt=S&oid=42",
                 "input": ["42", "SOL/USDC", {"subAccountIndex": 2, "accountId": "42"}]
+            },
+            {
+                "description": "fetchOrder maps a client order id",
+                "method": "fetchOrder",
+                "url": "https://api.devnet.fibe.trade/api/v1/order?aid=42&mi=1&mt=S&cloid=99",
+                "input": ["42", "SOL/USDC", {"clientOrderId": "99", "accountId": "42"}]
             }
         ],
         "fetchOpenOrders": [
             {
                 "description": "fetchOpenOrders scopes the query by symbol",
                 "method": "fetchOpenOrders",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/open-orders?aid=42&mi=1&mt=S",
+                "url": "https://api.devnet.fibe.trade/api/v1/open-orders?aid=42&mi=1&mt=S",
                 "input": ["SOL/USDC", null, null, {"accountId": "42"}]
             }
         ],
@@ -131,31 +137,31 @@
             {
                 "description": "fetchOrders maps pagination to the historical order request",
                 "method": "fetchOrders",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?aid=42&mi=1&mt=S&page=2&pageSize=1",
+                "url": "https://api.devnet.fibe.trade/api/v1/historical-orders?aid=42&mi=1&mt=S&page=2&pageSize=1",
                 "input": ["SOL/USDC", null, 1, {"page": 2, "accountId": "42"}]
             }
         ],
         "fetchClosedOrders": [
             {
-                "description": "fetchClosedOrders requests filled historical orders",
+                "description": "fetchClosedOrders requests order history for local status filtering",
                 "method": "fetchClosedOrders",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?aid=42&mi=1&mt=S&status=F",
+                "url": "https://api.devnet.fibe.trade/api/v1/historical-orders?aid=42&mi=1&mt=S",
                 "input": ["SOL/USDC", null, null, {"accountId": "42"}]
             }
         ],
         "fetchCanceledOrders": [
             {
-                "description": "fetchCanceledOrders requests canceled historical orders",
+                "description": "fetchCanceledOrders requests order history for local status filtering",
                 "method": "fetchCanceledOrders",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/historical-orders?aid=42&mi=1&mt=S&status=C",
+                "url": "https://api.devnet.fibe.trade/api/v1/historical-orders?aid=42&mi=1&mt=S",
                 "input": ["SOL/USDC", null, null, {"accountId": "42"}]
             }
         ],
         "fetchTradingFee": [
             {
-                "description": "fetchTradingFee maps user, market type, and index",
+                "description": "fetchTradingFee sends the wallet address",
                 "method": "fetchTradingFee",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/user-fees?user=wallet&mi=1&mt=S",
+                "url": "https://api.devnet.fibe.trade/api/v1/user-fees?user=wallet",
                 "input": ["SOL/USDC"]
             }
         ],
@@ -163,7 +169,7 @@
             {
                 "description": "fetchFundingHistory converts millisecond bounds to seconds",
                 "method": "fetchFundingHistory",
-                "url": "https://fb-4b8448ac.alephium.org/api/v1/user-funding-history?aid=42&startTime=1783763617&endTime=1783767217",
+                "url": "https://api.devnet.fibe.trade/api/v1/user-funding-history?aid=42&startTime=1783763617&endTime=1783767217",
                 "input": ["SOL/USDC:USDC", 1783763617000, 10, {"until": 1783767217000, "accountId": "42"}]
             }
         ]

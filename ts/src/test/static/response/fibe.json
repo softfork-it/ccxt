@@ -22,7 +22,8 @@
                         "symbol": "SOL/USDC",
                         "tickSizeInQuoteBaseUnits": 10000,
                         "lotSizeInBaseBaseUnits": 100000,
-                        "mt": "S"
+                        "mt": "S",
+                        "executionMode": "active"
                     },
                     {
                         "marketPubkey": "Fd7JthK8tqBXNxxKGjEArtp19NdA3g32xAV2RPWxperr",
@@ -38,7 +39,9 @@
                         "tickSizeInQuoteBaseUnits": 10000,
                         "lotSizeInBaseBaseUnits": 100000,
                         "maxLeverage": 100,
-                        "mt": "P"
+                        "mt": "P",
+                        "executionMode": "active",
+                        "isolatedOnly": false
                     }
                 ],
                 "parsedResponse": [
@@ -111,7 +114,8 @@
                             "symbol": "SOL/USDC",
                             "tickSizeInQuoteBaseUnits": 10000,
                             "lotSizeInBaseBaseUnits": 100000,
-                            "mt": "S"
+                            "mt": "S",
+                            "executionMode": "active"
                         },
                         "percentage": null,
                         "tierBased": null
@@ -186,7 +190,9 @@
                             "tickSizeInQuoteBaseUnits": 10000,
                             "lotSizeInBaseBaseUnits": 100000,
                             "maxLeverage": 100,
-                            "mt": "P"
+                            "mt": "P",
+                            "executionMode": "active",
+                            "isolatedOnly": false
                         },
                         "percentage": null,
                         "tierBased": null
@@ -701,33 +707,35 @@
                 "httpResponse": {
                     "userCrossRate": "0.001",
                     "userAddRate": "0.0005",
-                    "activeReferralDiscount": "0.00",
+                    "userSpotCrossRate": "0.002",
+                    "userSpotAddRate": "0.0008",
+                    "activePerpReferralDiscount": "0.01",
+                    "activeSpotReferralDiscount": "0.02",
                     "feeSchedule": {
-                        "volumeTiers": [
-                            "0",
-                            "1000000"
-                        ],
-                        "takerFeeRateTiers": [
-                            "0.001000",
-                            "0.000900"
-                        ],
-                        "makerFeeRateTiers": [
-                            "0.000500",
-                            "0.000400"
-                        ],
-                        "makerRebateRateTiers": [
-                            "0.000000",
-                            "0.000100"
-                        ],
-                        "referralDiscountPercentage": "0.00",
-                        "referralRewardPercentage": "0.00",
-                        "feeMode": "FeesOnQuote"
+                        "cross": "0.001",
+                        "add": "0.0005",
+                        "spotCross": "0.002",
+                        "spotAdd": "0.0008",
+                        "tiers": {
+                            "vip": [
+                                {
+                                    "ntlCutoff": "1000000.0",
+                                    "cross": "0.0009",
+                                    "add": "0.0004",
+                                    "spotCross": "0.0018",
+                                    "spotAdd": "0.0007"
+                                }
+                            ]
+                        },
+                        "perpReferralDiscount": "0.01",
+                        "spotReferralDiscount": "0.02"
                     },
                     "dailyUserVlm": [
                         {
                             "date": "2026-07-11",
                             "userCross": "100",
-                            "userAdd": "50"
+                            "userAdd": "50",
+                            "exchange": "150"
                         }
                     ]
                 },
@@ -735,39 +743,41 @@
                     "info": {
                         "userCrossRate": "0.001",
                         "userAddRate": "0.0005",
-                        "activeReferralDiscount": "0.00",
+                        "userSpotCrossRate": "0.002",
+                        "userSpotAddRate": "0.0008",
+                        "activePerpReferralDiscount": "0.01",
+                        "activeSpotReferralDiscount": "0.02",
                         "feeSchedule": {
-                            "volumeTiers": [
-                                "0",
-                                "1000000"
-                            ],
-                            "takerFeeRateTiers": [
-                                "0.001000",
-                                "0.000900"
-                            ],
-                            "makerFeeRateTiers": [
-                                "0.000500",
-                                "0.000400"
-                            ],
-                            "makerRebateRateTiers": [
-                                "0.000000",
-                                "0.000100"
-                            ],
-                            "referralDiscountPercentage": "0.00",
-                            "referralRewardPercentage": "0.00",
-                            "feeMode": "FeesOnQuote"
+                            "cross": "0.001",
+                            "add": "0.0005",
+                            "spotCross": "0.002",
+                            "spotAdd": "0.0008",
+                            "tiers": {
+                                "vip": [
+                                    {
+                                        "ntlCutoff": "1000000.0",
+                                        "cross": "0.0009",
+                                        "add": "0.0004",
+                                        "spotCross": "0.0018",
+                                        "spotAdd": "0.0007"
+                                    }
+                                ]
+                            },
+                            "perpReferralDiscount": "0.01",
+                            "spotReferralDiscount": "0.02"
                         },
                         "dailyUserVlm": [
                             {
                                 "date": "2026-07-11",
                                 "userCross": "100",
-                                "userAdd": "50"
+                                "userAdd": "50",
+                                "exchange": "150"
                             }
                         ]
                     },
                     "symbol": "SOL/USDC",
-                    "maker": 0.0005,
-                    "taker": 0.001,
+                    "maker": 0.0008,
+                    "taker": 0.002,
                     "percentage": true,
                     "tierBased": true
                 }
@@ -780,24 +790,30 @@
                 "input": [],
                 "httpResponse": {
                     "userCrossRate": "0.001",
-                    "userAddRate": "0.0005"
+                    "userAddRate": "0.0005",
+                    "userSpotCrossRate": "0.002",
+                    "userSpotAddRate": "0.0008"
                 },
                 "parsedResponse": {
                     "SOL/USDC": {
                         "info": {
                             "userCrossRate": "0.001",
-                            "userAddRate": "0.0005"
+                            "userAddRate": "0.0005",
+                            "userSpotCrossRate": "0.002",
+                            "userSpotAddRate": "0.0008"
                         },
                         "symbol": "SOL/USDC",
-                        "maker": 0.0005,
-                        "taker": 0.001,
+                        "maker": 0.0008,
+                        "taker": 0.002,
                         "percentage": true,
                         "tierBased": true
                     },
                     "SOL/USDC:USDC": {
                         "info": {
                             "userCrossRate": "0.001",
-                            "userAddRate": "0.0005"
+                            "userAddRate": "0.0005",
+                            "userSpotCrossRate": "0.002",
+                            "userSpotAddRate": "0.0008"
                         },
                         "symbol": "SOL/USDC:USDC",
                         "maker": 0.0005,
@@ -873,15 +889,20 @@
                         "px": "80",
                         "side": "B",
                         "sz": "0.25",
-                        "type": "L",
+                        "type": "Limit",
                         "tradeValue": "20",
                         "oid": "100",
+                        "cloid": "101",
                         "time": 1783763617,
                         "txId": "trade-tx",
+                        "slot": 123,
                         "takerOrMaker": "maker",
                         "feeAmount": "0.01",
                         "feeToken": "quote",
-                        "closedPnl": null
+                        "closedPnl": null,
+                        "startPosition": "0",
+                        "dir": "Open Long",
+                        "crossed": false
                     }
                 ],
                 "parsedResponse": [
@@ -892,15 +913,20 @@
                             "px": "80",
                             "side": "B",
                             "sz": "0.25",
-                            "type": "L",
+                            "type": "Limit",
                             "tradeValue": "20",
                             "oid": "100",
+                            "cloid": "101",
                             "time": 1783763617,
                             "txId": "trade-tx",
+                            "slot": 123,
                             "takerOrMaker": "maker",
                             "feeAmount": "0.01",
                             "feeToken": "quote",
-                            "closedPnl": null
+                            "closedPnl": null,
+                            "startPosition": "0",
+                            "dir": "Open Long",
+                            "crossed": false
                         },
                         "id": null,
                         "timestamp": 1783763617000,
@@ -942,12 +968,17 @@
                         "mi": "1",
                         "mt": "S",
                         "oid": "42",
-                        "type": "L",
+                        "cloid": "4200",
+                        "orderType": "Limit",
                         "timeInForce": "ALO",
-                        "px": "80",
+                        "reduceOnly": false,
+                        "limitPx": "80",
+                        "priceInTicks": 8000,
                         "side": "B",
                         "origSz": "0.5",
                         "sz": "0.2",
+                        "isTrigger": false,
+                        "isPositionTpsl": false,
                         "status": "O",
                         "txId": "order-tx",
                         "createdAt": 1783763617,
@@ -960,19 +991,24 @@
                             "mi": "1",
                             "mt": "S",
                             "oid": "42",
-                            "type": "L",
+                            "cloid": "4200",
+                            "orderType": "Limit",
                             "timeInForce": "ALO",
-                            "px": "80",
+                            "reduceOnly": false,
+                            "limitPx": "80",
+                            "priceInTicks": 8000,
                             "side": "B",
                             "origSz": "0.5",
                             "sz": "0.2",
+                            "isTrigger": false,
+                            "isPositionTpsl": false,
                             "status": "O",
                             "txId": "order-tx",
                             "createdAt": 1783763617,
                             "updatedAt": 1783763618
                         },
                         "id": "42",
-                        "clientOrderId": null,
+                        "clientOrderId": "4200",
                         "timestamp": 1783763617000,
                         "datetime": "2026-07-11T09:53:37.000Z",
                         "lastTradeTimestamp": null,
@@ -981,7 +1017,7 @@
                         "type": "limit",
                         "timeInForce": "PO",
                         "postOnly": true,
-                        "reduceOnly": null,
+                        "reduceOnly": false,
                         "side": "buy",
                         "price": 80,
                         "triggerPrice": null,
@@ -1019,12 +1055,16 @@
                         "mi": "1",
                         "mt": "S",
                         "oid": "42",
-                        "type": "L",
+                        "orderType": "Limit",
                         "timeInForce": "ALO",
-                        "px": "80",
+                        "reduceOnly": false,
+                        "limitPx": "80",
+                        "priceInTicks": 8000,
                         "side": "B",
                         "origSz": "0.5",
                         "sz": "0",
+                        "isTrigger": false,
+                        "isPositionTpsl": false,
                         "status": "F",
                         "txId": "order-tx",
                         "createdAt": 1783763617,
@@ -1037,12 +1077,16 @@
                             "mi": "1",
                             "mt": "S",
                             "oid": "42",
-                            "type": "L",
+                            "orderType": "Limit",
                             "timeInForce": "ALO",
-                            "px": "80",
+                            "reduceOnly": false,
+                            "limitPx": "80",
+                            "priceInTicks": 8000,
                             "side": "B",
                             "origSz": "0.5",
                             "sz": "0",
+                            "isTrigger": false,
+                            "isPositionTpsl": false,
                             "status": "F",
                             "txId": "order-tx",
                             "createdAt": 1783763617,
@@ -1058,7 +1102,7 @@
                         "type": "limit",
                         "timeInForce": "PO",
                         "postOnly": true,
-                        "reduceOnly": null,
+                        "reduceOnly": false,
                         "side": "buy",
                         "price": 80,
                         "triggerPrice": null,
@@ -1078,9 +1122,101 @@
                 ]
             }
         ],
+        "fetchClosedOrders": [
+            {
+                "description": "fetchClosedOrders filters closed order history",
+                "method": "fetchClosedOrders",
+                "input": [
+                    "SOL/USDC:USDC",
+                    null,
+                    null,
+                    { "accountId": "42" }
+                ],
+                "httpResponse": [
+                    {
+                        "mi": "1",
+                        "mt": "P",
+                        "oid": "45",
+                        "orderType": "Take Profit Market",
+                        "timeInForce": null,
+                        "reduceOnly": true,
+                        "limitPx": "80",
+                        "priceInTicks": 8000,
+                        "side": "B",
+                        "origSz": "0.5",
+                        "sz": "0",
+                        "isTrigger": true,
+                        "triggerPx": "82",
+                        "triggerCondition": "Price above or equal",
+                        "isPositionTpsl": true,
+                        "status": "triggered",
+                        "txId": "trigger-tx",
+                        "createdAt": 1783763617,
+                        "updatedAt": 1783763618
+                    },
+                    {
+                        "mi": "1",
+                        "mt": "P",
+                        "oid": "46",
+                        "status": "S"
+                    }
+                ],
+                "parsedResponse": [
+                    {
+                        "info": {
+                            "mi": "1",
+                            "mt": "P",
+                            "oid": "45",
+                            "orderType": "Take Profit Market",
+                            "timeInForce": null,
+                            "reduceOnly": true,
+                            "limitPx": "80",
+                            "priceInTicks": 8000,
+                            "side": "B",
+                            "origSz": "0.5",
+                            "sz": "0",
+                            "isTrigger": true,
+                            "triggerPx": "82",
+                            "triggerCondition": "Price above or equal",
+                            "isPositionTpsl": true,
+                            "status": "triggered",
+                            "txId": "trigger-tx",
+                            "createdAt": 1783763617,
+                            "updatedAt": 1783763618
+                        },
+                        "id": "45",
+                        "clientOrderId": null,
+                        "timestamp": 1783763617000,
+                        "datetime": "2026-07-11T09:53:37.000Z",
+                        "lastTradeTimestamp": null,
+                        "lastUpdateTimestamp": 1783763618000,
+                        "symbol": "SOL/USDC:USDC",
+                        "type": "market",
+                        "timeInForce": null,
+                        "postOnly": null,
+                        "reduceOnly": true,
+                        "side": "buy",
+                        "price": 80,
+                        "triggerPrice": 82,
+                        "amount": 0.5,
+                        "cost": 0,
+                        "average": null,
+                        "filled": 0,
+                        "remaining": 0,
+                        "status": "closed",
+                        "fee": null,
+                        "trades": [],
+                        "fees": [],
+                        "stopPrice": 82,
+                        "takeProfitPrice": null,
+                        "stopLossPrice": null
+                    }
+                ]
+            }
+        ],
         "fetchCanceledOrders": [
             {
-                "description": "fetchCanceledOrders maps canceled status and timestamps",
+                "description": "fetchCanceledOrders filters canceled order history",
                 "method": "fetchCanceledOrders",
                 "input": [
                     "SOL/USDC",
@@ -1093,16 +1229,26 @@
                         "mi": "1",
                         "mt": "S",
                         "oid": "43",
-                        "type": "L",
+                        "orderType": "Limit",
                         "timeInForce": "GTC",
-                        "px": "80",
+                        "reduceOnly": false,
+                        "limitPx": "80",
+                        "priceInTicks": 8000,
                         "side": "A",
                         "origSz": "0.5",
                         "sz": "0.5",
+                        "isTrigger": false,
+                        "isPositionTpsl": false,
                         "status": "C",
                         "txId": "cancel-tx",
                         "createdAt": 1783763617,
                         "updatedAt": 1783763618
+                    },
+                    {
+                        "mi": "1",
+                        "mt": "S",
+                        "oid": "44",
+                        "status": "F"
                     }
                 ],
                 "parsedResponse": [
@@ -1111,12 +1257,16 @@
                             "mi": "1",
                             "mt": "S",
                             "oid": "43",
-                            "type": "L",
+                            "orderType": "Limit",
                             "timeInForce": "GTC",
-                            "px": "80",
+                            "reduceOnly": false,
+                            "limitPx": "80",
+                            "priceInTicks": 8000,
                             "side": "A",
                             "origSz": "0.5",
                             "sz": "0.5",
+                            "isTrigger": false,
+                            "isPositionTpsl": false,
                             "status": "C",
                             "txId": "cancel-tx",
                             "createdAt": 1783763617,
@@ -1132,7 +1282,7 @@
                         "type": "limit",
                         "timeInForce": "GTC",
                         "postOnly": null,
-                        "reduceOnly": null,
+                        "reduceOnly": false,
                         "side": "sell",
                         "price": 80,
                         "triggerPrice": null,
@@ -1167,12 +1317,17 @@
                     "mi": "1",
                     "mt": "S",
                     "oid": "42",
-                    "type": "L",
+                    "cloid": "4200",
+                    "orderType": "Limit",
                     "timeInForce": "ALO",
-                    "px": "80",
+                    "reduceOnly": false,
+                    "limitPx": "80",
+                    "priceInTicks": 8000,
                     "side": "B",
                     "origSz": "0.5",
                     "sz": "0.2",
+                    "isTrigger": false,
+                    "isPositionTpsl": false,
                     "status": "P",
                     "txId": "order-tx",
                     "createdAt": 1783763617,
@@ -1183,19 +1338,24 @@
                         "mi": "1",
                         "mt": "S",
                         "oid": "42",
-                        "type": "L",
+                        "cloid": "4200",
+                        "orderType": "Limit",
                         "timeInForce": "ALO",
-                        "px": "80",
+                        "reduceOnly": false,
+                        "limitPx": "80",
+                        "priceInTicks": 8000,
                         "side": "B",
                         "origSz": "0.5",
                         "sz": "0.2",
+                        "isTrigger": false,
+                        "isPositionTpsl": false,
                         "status": "P",
                         "txId": "order-tx",
                         "createdAt": 1783763617,
                         "updatedAt": 1783763618
                     },
                     "id": "42",
-                    "clientOrderId": null,
+                    "clientOrderId": "4200",
                     "timestamp": 1783763617000,
                     "datetime": "2026-07-11T09:53:37.000Z",
                     "lastTradeTimestamp": null,
@@ -1204,7 +1364,7 @@
                     "type": "limit",
                     "timeInForce": "PO",
                     "postOnly": true,
-                    "reduceOnly": null,
+                    "reduceOnly": false,
                     "side": "buy",
                     "price": 80,
                     "triggerPrice": null,
@@ -1214,6 +1374,85 @@
                     "filled": 0.3,
                     "remaining": 0.2,
                     "status": "open",
+                    "fee": null,
+                    "trades": [],
+                    "fees": [],
+                    "stopPrice": null,
+                    "takeProfitPrice": null,
+                    "stopLossPrice": null
+                }
+            },
+            {
+                "description": "fetchOrder maps the DEX frontend-market time in force to IOC",
+                "method": "fetchOrder",
+                "input": [
+                    "43",
+                    "SOL/USDC",
+                    {
+                        "accountId": "42"
+                    }
+                ],
+                "httpResponse": {
+                    "mi": "1",
+                    "mt": "S",
+                    "oid": "43",
+                    "cloid": "4300",
+                    "orderType": "Market",
+                    "timeInForce": "FM",
+                    "reduceOnly": false,
+                    "limitPx": "80",
+                    "priceInTicks": 8000,
+                    "side": "B",
+                    "origSz": "0.5",
+                    "sz": "0",
+                    "isTrigger": false,
+                    "isPositionTpsl": false,
+                    "status": "F",
+                    "txId": "market-order-tx",
+                    "createdAt": 1783763617,
+                    "updatedAt": 1783763618
+                },
+                "parsedResponse": {
+                    "info": {
+                        "mi": "1",
+                        "mt": "S",
+                        "oid": "43",
+                        "cloid": "4300",
+                        "orderType": "Market",
+                        "timeInForce": "FM",
+                        "reduceOnly": false,
+                        "limitPx": "80",
+                        "priceInTicks": 8000,
+                        "side": "B",
+                        "origSz": "0.5",
+                        "sz": "0",
+                        "isTrigger": false,
+                        "isPositionTpsl": false,
+                        "status": "F",
+                        "txId": "market-order-tx",
+                        "createdAt": 1783763617,
+                        "updatedAt": 1783763618
+                    },
+                    "id": "43",
+                    "clientOrderId": "4300",
+                    "timestamp": 1783763617000,
+                    "datetime": "2026-07-11T09:53:37.000Z",
+                    "lastTradeTimestamp": null,
+                    "lastUpdateTimestamp": 1783763618000,
+                    "symbol": "SOL/USDC",
+                    "type": "market",
+                    "timeInForce": "IOC",
+                    "postOnly": null,
+                    "reduceOnly": false,
+                    "side": "buy",
+                    "price": 80,
+                    "triggerPrice": null,
+                    "amount": 0.5,
+                    "cost": 40,
+                    "average": null,
+                    "filled": 0.5,
+                    "remaining": 0,
+                    "status": "closed",
                     "fee": null,
                     "trades": [],
                     "fees": [],

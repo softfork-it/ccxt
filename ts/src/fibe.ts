@@ -191,10 +191,10 @@ export default class fibe extends Exchange {
             'urls': {
                 'logo': 'https://avatars.githubusercontent.com/u/222646239?v=4',
                 'api': {
-                    'rest': 'https://fb-4b8448ac.alephium.org/api/v1',
+                    'rest': 'https://api.devnet.fibe.trade/api/v1',
                 },
-                'www': 'https://fibe.exchange',
-                'doc': 'https://fb-4b8448ac.alephium.org/swagger-ui/',
+                'www': 'https://fibe.trade',
+                'doc': 'https://api.devnet.fibe.trade/swagger-ui/',
             },
             'api': {
                 'public': {
@@ -218,7 +218,7 @@ export default class fibe extends Exchange {
                         'all-clearinghouse-state': 1,
                         'user-fees': 1,
                         'user-funding-history': 1,
-                        'user-trades': 1,
+                        'user-fills': 1,
                         'referral-state': 1,
                         'tick-array': 1,
                     },
@@ -260,7 +260,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchMarkets
      * @description retrieves data on all markets for fibe
-     * @see https://fb-4b8448ac.alephium.org/api/v1/markets
+     * @see https://api.devnet.fibe.trade/api/v1/markets
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object[]} an array of objects representing market data
      */
@@ -303,6 +303,7 @@ export default class fibe extends Exchange {
         const quote = this.safeCurrencyCode (this.safeString (parts, 1));
         const mt = this.safeString (market, 'mt');
         const isPerp = (mt === 'P');
+        const executionMode = this.safeString (market, 'executionMode', 'active');
         const mi = this.safeString (market, 'mi');
         let idPrefix = 'spot:';
         if (isPerp) {
@@ -348,7 +349,7 @@ export default class fibe extends Exchange {
             'swap': isPerp,
             'future': false,
             'option': false,
-            'active': true,
+            'active': executionMode !== 'closeOnly',
             'contract': contract,
             'linear': linear,
             'inverse': inverse,
@@ -426,7 +427,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchPositions
      * @description fetch open perp positions for a user
-     * @see https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state
+     * @see https://api.devnet.fibe.trade/api/v1/all-clearinghouse-state
      * @param {string[]|undefined} symbols list of unified market symbols
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
@@ -492,7 +493,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchPosition
      * @description fetch an open perp position for a market
-     * @see https://fb-4b8448ac.alephium.org/api/v1/all-clearinghouse-state
+     * @see https://api.devnet.fibe.trade/api/v1/all-clearinghouse-state
      * @param {string} symbol unified market symbol
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
@@ -581,7 +582,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchFundingHistory
      * @description fetch the history of funding payments paid and received on this account
-     * @see https://fb-4b8448ac.alephium.org/api/v1/user-funding-history
+     * @see https://api.devnet.fibe.trade/api/v1/user-funding-history
      * @param {string} [symbol] unified market symbol
      * @param {int} [since] the earliest time in ms to fetch funding history for
      * @param {int} [limit] the maximum number of funding history structures to retrieve
@@ -658,20 +659,23 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchTradingFees
      * @description fetch the user trading fees for all loaded markets
-     * @see https://fb-4b8448ac.alephium.org/api/v1/user-fees
+     * @see https://api.devnet.fibe.trade/api/v1/user-fees
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
      * @returns {object} a dictionary of [fee structures]{@link https://docs.ccxt.com/#/?id=fee-structure} indexed by market symbols
      */
     override async fetchTradingFees (params = {}): Promise<TradingFees> {
+        let requestParams = params;
         let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('fetchTradingFees', params);
+        [ userAddress, requestParams ] = this.handlePublicAddress ('fetchTradingFees', requestParams);
         await this.loadMarkets ();
+        const response = await this.publicGetUserFees (this.extend ({
+            'user': userAddress,
+        }, requestParams));
         const result: Dict = {};
         for (let i = 0; i < this.symbols.length; i++) {
             const symbol = this.symbols[i];
-            const fee = await this.fetchTradingFee (symbol, this.extend ({ 'user': userAddress }, params));
-            result[symbol] = fee;
+            result[symbol] = this.parseTradingFee (response, this.market (symbol));
         }
         return result;
     }
@@ -680,29 +684,34 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchTradingFee
      * @description fetch the user trading fees for one market
-     * @see https://fb-4b8448ac.alephium.org/api/v1/user-fees
+     * @see https://api.devnet.fibe.trade/api/v1/user-fees
      * @param {string} symbol unified market symbol
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
      * @returns {object} a [fee structure]{@link https://docs.ccxt.com/#/?id=fee-structure}
      */
     override async fetchTradingFee (symbol: string, params = {}): Promise<TradingFeeInterface> {
+        let requestParams = params;
         let userAddress = undefined;
-        [ userAddress, params ] = this.handlePublicAddress ('fetchTradingFee', params);
+        [ userAddress, requestParams ] = this.handlePublicAddress ('fetchTradingFee', requestParams);
         await this.loadMarkets ();
         const market = this.market (symbol);
-        const info = market['info'];
         const request: Dict = {
             'user': userAddress,
-            'mi': this.safeString (info, 'mi'),
-            'mt': this.safeString (info, 'mt', 'S'),
         };
-        const response = await this.publicGetUserFees (this.extend (request, params));
+        const response = await this.publicGetUserFees (this.extend (request, requestParams));
+        return this.parseTradingFee (response, market);
+    }
+
+    parseTradingFee (response: Dict, market: Market): TradingFeeInterface {
+        const isSpot = this.safeBool (market, 'spot', false);
+        const makerField = isSpot ? 'userSpotAddRate' : 'userAddRate';
+        const takerField = isSpot ? 'userSpotCrossRate' : 'userCrossRate';
         return {
             'info': response,
-            'symbol': symbol,
-            'maker': this.safeNumber (response, 'userAddRate'),
-            'taker': this.safeNumber (response, 'userCrossRate'),
+            'symbol': this.safeString (market, 'symbol'),
+            'maker': this.safeNumber (response, makerField),
+            'taker': this.safeNumber (response, takerField),
             'percentage': true,
             'tierBased': true,
         };
@@ -712,8 +721,8 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchTicker
      * @description fetches a midpoint-based price ticker, 24h volume, and 24h change for a market
-     * @see https://fb-4b8448ac.alephium.org/api/v1/spot-asset-ctx
-     * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
+     * @see https://api.devnet.fibe.trade/api/v1/spot-asset-ctx
+     * @see https://api.devnet.fibe.trade/api/v1/perp-asset-ctx
      * @param {string} symbol unified symbol of the market to fetch the ticker for
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a [ticker structure]{@link https://docs.ccxt.com/#/?id=ticker-structure}
@@ -738,8 +747,8 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchTickers
      * @description fetches price tickers for multiple markets
-     * @see https://fb-4b8448ac.alephium.org/api/v1/spot-asset-ctx
-     * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
+     * @see https://api.devnet.fibe.trade/api/v1/spot-asset-ctx
+     * @see https://api.devnet.fibe.trade/api/v1/perp-asset-ctx
      * @param {string[]|undefined} symbols unified symbols of the markets to fetch tickers for, all market tickers are returned if not assigned
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a dictionary of [ticker structures]{@link https://docs.ccxt.com/#/?id=ticker-structure}
@@ -780,7 +789,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchMarkPrice
      * @description fetches the current mark price for a perpetual market
-     * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
+     * @see https://api.devnet.fibe.trade/api/v1/perp-asset-ctx
      * @param {string} symbol unified symbol of the market
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a [ticker structure]{@link https://docs.ccxt.com/#/?id=ticker-structure}
@@ -847,7 +856,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchOpenInterest
      * @description retrieves the current open interest for a perpetual market
-     * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
+     * @see https://api.devnet.fibe.trade/api/v1/perp-asset-ctx
      * @param {string} symbol unified symbol of the market
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} an [open interest structure]{@link https://docs.ccxt.com/#/?id=open-interest-structure}
@@ -887,7 +896,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchFundingRate
      * @description fetch the current funding rate
-     * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
+     * @see https://api.devnet.fibe.trade/api/v1/perp-asset-ctx
      * @param {string} symbol unified market symbol
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a [funding rate structure]{@link https://docs.ccxt.com/#/?id=funding-rate-structure}
@@ -910,7 +919,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchFundingRates
      * @description fetches the current funding rates for multiple swap markets
-     * @see https://fb-4b8448ac.alephium.org/api/v1/perp-asset-ctx
+     * @see https://api.devnet.fibe.trade/api/v1/perp-asset-ctx
      * @param {string[]} [symbols] unified market symbols
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @returns {object} a dictionary of [funding rates structures]{@link https://docs.ccxt.com/#/?id=funding-rates-structure}
@@ -981,7 +990,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchOrderBook
      * @description fetches L2 order book for a market
-     * @see https://fb-4b8448ac.alephium.org/api/v1/l2book
+     * @see https://api.devnet.fibe.trade/api/v1/l2book
      * @param {string} symbol unified market symbol
      * @param {int} [limit] the maximum number of order book levels to return per side (applied client-side)
      * @param {object} [params] extra parameters specific to the exchange API endpoint
@@ -1028,7 +1037,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchTrades
      * @description get the list of most recent trades for a particular symbol
-     * @see https://fb-4b8448ac.alephium.org/api/v1/recent-market-trades
+     * @see https://api.devnet.fibe.trade/api/v1/recent-market-trades
      * @param {string} symbol unified symbol of the market to fetch trades for
      * @param {int} [since] timestamp in ms of the earliest trade to fetch
      * @param {int} [limit] the maximum amount of trades to fetch
@@ -1055,7 +1064,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchMyTrades
      * @description fetch all trades made by the user
-     * @see https://fb-4b8448ac.alephium.org/api/v1/user-trades
+     * @see https://api.devnet.fibe.trade/api/v1/user-fills
      * @param {string} [symbol] unified market symbol
      * @param {int} [since] timestamp in ms of the earliest trade to fetch
      * @param {int} [limit] the maximum amount of trades to fetch
@@ -1067,9 +1076,10 @@ export default class fibe extends Exchange {
      * @returns {Trade[]} a list of [trade structures]{@link https://docs.ccxt.com/#/?id=trade-structure}
      */
     override async fetchMyTrades (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
+        let requestParams = params;
         let accountId = undefined;
-        const accountIdResponse = await this.fibeAccountId ('fetchMyTrades', params);
-        [ accountId, params ] = accountIdResponse;
+        const accountIdResponse = await this.fibeAccountId ('fetchMyTrades', requestParams);
+        [ accountId, requestParams ] = accountIdResponse;
         await this.loadMarkets ();
         let market = undefined;
         const request: Dict = {
@@ -1085,14 +1095,14 @@ export default class fibe extends Exchange {
             request['startTime'] = this.parseToInt (since / 1000);
         }
         let until: Int = undefined;
-        [ until, params ] = this.handleOptionAndParams (params, 'fetchMyTrades', 'until');
+        [ until, requestParams ] = this.handleOptionAndParams (requestParams, 'fetchMyTrades', 'until');
         if (until !== undefined) {
             request['endTime'] = this.parseToInt (Math.ceil (until / 1000));
         }
         if (limit !== undefined) {
             request['limit'] = limit;
         }
-        const response = await this.publicGetUserTrades (this.extend (request, params));
+        const response = await this.publicGetUserFills (this.extend (request, requestParams));
         let trades = this.parseTrades (response as List, market, since, undefined);
         if (until !== undefined) {
             const filtered = [];
@@ -1171,7 +1181,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchOHLCV
      * @description fetches historical candlestick data containing the open, high, low, and close price, and the volume of a market
-     * @see https://fb-4b8448ac.alephium.org/api/v1/candles
+     * @see https://api.devnet.fibe.trade/api/v1/candles
      * @param {string} symbol unified symbol of the market to fetch OHLCV data for
      * @param {string} timeframe the length of time each candle represents
      * @param {int} [since] timestamp in ms of the earliest candle to fetch
@@ -1248,33 +1258,46 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchOrder
      * @description fetches information on an order made by the user
-     * @see https://fb-4b8448ac.alephium.org/api/v1/order
+     * @see https://api.devnet.fibe.trade/api/v1/order
      * @param {string} id order id
      * @param {string} symbol unified market symbol of the order
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
      * @param {string} [params.accountId] resolved account id, bypasses the account-id request
      * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
+     * @param {boolean|string} [params.clientOrderId] fetch by client order id; when a string is supplied it replaces id
      * @returns {Order} an [order structure]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
     override async fetchOrder (id: string, symbol: Str = undefined, params = {}): Promise<Order> {
         if (symbol === undefined) {
             throw new ArgumentsRequired (this.id + ' fetchOrder() requires a symbol');
         }
-        id = this.fibeValidateUnsignedIntegerParam ('fetchOrder', 'id', id);
+        let requestParams = params;
+        let clientOrderId = undefined;
+        [ clientOrderId, requestParams ] = this.handleOptionAndParams (requestParams, 'fetchOrder', 'clientOrderId');
+        const isClientOrderId = (clientOrderId !== undefined) && (clientOrderId !== false);
+        let orderReference = id;
+        if (typeof clientOrderId === 'string') {
+            orderReference = clientOrderId;
+        }
+        orderReference = this.fibeValidateUnsignedIntegerParam ('fetchOrder', 'id', orderReference);
         let accountId = undefined;
-        const accountIdResponse = await this.fibeAccountId ('fetchOrder', params);
-        [ accountId, params ] = accountIdResponse;
+        const accountIdResponse = await this.fibeAccountId ('fetchOrder', requestParams);
+        [ accountId, requestParams ] = accountIdResponse;
         await this.loadMarkets ();
         const market = this.market (symbol);
         const info = market['info'];
         const request: Dict = {
             'aid': accountId,
-            'orderId': id,
             'mi': this.safeString (info, 'mi'),
             'mt': this.safeString (info, 'mt', 'S'),
         };
-        const response = await this.publicGetOrder (this.extend (request, params));
+        if (isClientOrderId) {
+            request['cloid'] = orderReference;
+        } else {
+            request['oid'] = orderReference;
+        }
+        const response = await this.publicGetOrder (this.extend (request, requestParams));
         return this.parseOrder (response, market);
     }
 
@@ -1282,7 +1305,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchOpenOrders
      * @description fetch all unfilled currently open orders
-     * @see https://fb-4b8448ac.alephium.org/api/v1/open-orders
+     * @see https://api.devnet.fibe.trade/api/v1/open-orders
      * @param {string} symbol unified market symbol
      * @param {int} [since] the earliest time in ms to fetch open orders for
      * @param {int} [limit] the maximum number of open orders structures to retrieve
@@ -1319,7 +1342,7 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchOrders
      * @description fetch historical orders
-     * @see https://fb-4b8448ac.alephium.org/api/v1/historical-orders
+     * @see https://api.devnet.fibe.trade/api/v1/historical-orders
      * @param {string} symbol unified market symbol
      * @param {int} [since] the earliest time in ms to fetch orders for
      * @param {int} [limit] the maximum number of order structures to retrieve
@@ -1328,7 +1351,7 @@ export default class fibe extends Exchange {
      * @param {string} [params.accountId] resolved account id, bypasses the account-id request
      * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
      * @param {string} [params.status] raw status filter, "F" for closed/filled orders or "C" for canceled orders
-     * @param {int} [params.page] page number, default is 1
+     * @param {int} [params.page] page number
      * @param {int} [params.pageSize] page size, defaults to limit when provided
      * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
@@ -1370,38 +1393,40 @@ export default class fibe extends Exchange {
      * @method
      * @name fibe#fetchClosedOrders
      * @description fetch all closed orders
-     * @see https://fb-4b8448ac.alephium.org/api/v1/historical-orders
+     * @see https://api.devnet.fibe.trade/api/v1/historical-orders
      * @param {string} symbol unified market symbol
      * @param {int} [since] the earliest time in ms to fetch closed orders for
      * @param {int} [limit] the maximum number of closed order structures to retrieve
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
-     * @param {int} [params.page] page number, default is 1
+     * @param {int} [params.page] page number
      * @param {int} [params.pageSize] page size
      * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
     override async fetchClosedOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
-        params = this.extend (params, { 'status': 'F' });
-        return await this.fetchOrders (symbol, since, limit, params);
+        const orders = await this.fetchOrders (symbol, undefined, undefined, params);
+        const closedOrders = this.filterByArray (orders, 'status', [ 'closed' ], false);
+        return this.filterBySymbolSinceLimit (closedOrders, symbol, since, limit) as Order[];
     }
 
     /**
      * @method
      * @name fibe#fetchCanceledOrders
      * @description fetch all canceled orders
-     * @see https://fb-4b8448ac.alephium.org/api/v1/historical-orders
+     * @see https://api.devnet.fibe.trade/api/v1/historical-orders
      * @param {string} symbol unified market symbol
      * @param {int} [since] the earliest time in ms to fetch canceled orders for
      * @param {int} [limit] the maximum number of canceled order structures to retrieve
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
-     * @param {int} [params.page] page number, default is 1
+     * @param {int} [params.page] page number
      * @param {int} [params.pageSize] page size
      * @returns {Order[]} a list of [order structures]{@link https://docs.ccxt.com/#/?id=order-structure}
      */
     override async fetchCanceledOrders (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Order[]> {
-        params = this.extend (params, { 'status': 'C' });
-        return await this.fetchOrders (symbol, since, limit, params);
+        const orders = await this.fetchOrders (symbol, undefined, undefined, params);
+        const canceledOrders = this.filterByArray (orders, 'status', [ 'canceled' ], false);
+        return this.filterBySymbolSinceLimit (canceledOrders, symbol, since, limit) as Order[];
     }
 
     async fetchCreateOrderMarketReferencePrice (market: Market): Promise<string> {
@@ -1844,9 +1869,10 @@ export default class fibe extends Exchange {
         //         "mi": "1",
         //         "mt": "S",
         //         "oid": "1",
-        //         "type": "L",
+        //         "cloid": "20",
+        //         "orderType": "Limit",
         //         "timeInForce": "ALO",
-        //         "px": "1",
+        //         "limitPx": "1",
         //         "side": "B",
         //         "origSz": "1",
         //         "sz": "1",
@@ -1866,13 +1892,16 @@ export default class fibe extends Exchange {
             }
             marketId = idPrefix + mi;
         }
-        market = this.safeMarket (marketId, market);
+        const marketResolved = this.safeMarket (marketId, market);
         const timestamp = this.parseOrderTimestamp (order, 'createdAt');
         const lastUpdateTimestamp = this.parseOrderTimestamp (order, 'updatedAt');
         const amount = this.safeString (order, 'origSz');
         const remaining = this.safeString (order, 'sz');
+        const rawStatus = this.safeString (order, 'status');
         let filled = undefined;
-        if ((amount !== undefined) && (remaining !== undefined)) {
+        if (this.safeBool (order, 'isTrigger', false)) {
+            filled = '0';
+        } else if ((amount !== undefined) && (remaining !== undefined)) {
             filled = Precise.stringSub (amount, remaining);
         }
         const timeInForce = this.parseOrderTimeInForce (this.safeString (order, 'timeInForce'));
@@ -1883,28 +1912,28 @@ export default class fibe extends Exchange {
         return this.safeOrder ({
             'info': order,
             'id': this.safeString (order, 'oid'),
-            'clientOrderId': undefined,
+            'clientOrderId': this.safeString (order, 'cloid'),
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
             'lastTradeTimestamp': undefined,
             'lastUpdateTimestamp': lastUpdateTimestamp,
-            'symbol': market['symbol'],
-            'type': this.parseOrderType (this.safeString (order, 'type')),
+            'symbol': marketResolved['symbol'],
+            'type': this.parseOrderType (this.safeString (order, 'orderType')),
             'timeInForce': timeInForce,
             'postOnly': postOnly,
-            'reduceOnly': undefined,
+            'reduceOnly': this.safeBool (order, 'reduceOnly'),
             'side': this.parseSide (this.safeString (order, 'side')),
-            'price': this.safeString (order, 'px'),
-            'triggerPrice': undefined,
+            'price': this.safeString (order, 'limitPx'),
+            'triggerPrice': this.safeString (order, 'triggerPx'),
             'amount': amount,
             'cost': undefined,
             'average': undefined,
             'filled': filled,
             'remaining': remaining,
-            'status': this.parseOrderStatus (this.safeString (order, 'status')),
+            'status': this.parseOrderStatus (rawStatus),
             'fee': undefined,
             'trades': undefined,
-        }, market);
+        }, marketResolved);
     }
 
     fibeProgramId (): string {
@@ -3416,6 +3445,11 @@ export default class fibe extends Exchange {
             'F': 'closed',
             'C': 'canceled',
             'R': 'rejected',
+            'M': 'canceled',
+            'L': 'canceled',
+            'S': 'canceled',
+            'I': 'canceled',
+            'triggered': 'closed',
         };
         return this.safeString (statuses, status, status);
     }
@@ -3424,6 +3458,12 @@ export default class fibe extends Exchange {
         const types: Dict = {
             'L': 'limit',
             'M': 'market',
+            'Limit': 'limit',
+            'Market': 'market',
+            'Stop Limit': 'limit',
+            'Stop Market': 'market',
+            'Take Profit Limit': 'limit',
+            'Take Profit Market': 'market',
         };
         return this.safeString (types, type, type);
     }
@@ -3434,6 +3474,7 @@ export default class fibe extends Exchange {
             'IOC': 'IOC',
             'FOK': 'FOK',
             'ALO': 'PO',
+            'FM': 'IOC',
         };
         return this.safeString (timeInForces, timeInForce, timeInForce);
     }
