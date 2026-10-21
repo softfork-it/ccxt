@@ -3440,7 +3440,7 @@ export default class fibe extends Exchange {
         return timestamp * 1000;
     }
 
-    handlePublicAddress (methodName: string, params: Dict) {
+    handlePublicAddress (methodName: any, params: Dict) {
         let user = undefined;
         [ user, params ] = this.handleOptionAndParams2 (params, methodName, 'user', 'address');
         if ((user !== undefined) && (user !== '')) {

@@ -1221,6 +1221,226 @@
                     "stopLossPrice": null
                 }
             }
+        ],
+        "fibeLocalTxCreateOrder": [
+            {
+                "description": "build and sign a spot create-order transaction",
+                "method": "fibeLocalTxCreateOrder",
+                "input": [
+                    {
+                        "rpcUrl": "https://rpc.fixture",
+                        "market": {
+                            "spot": true,
+                            "swap": false,
+                            "info": {
+                                "mt": "S",
+                                "mi": "1",
+                                "marketPubkey": "5Sau7pWyabqTFmC2bvH5VARGek14EhLsAPcWETUbjjV1",
+                                "baseMint": "22HX2NvQeuid5EUenvRtZtSN4i4wtjqGwqAyN5RJ7zHw",
+                                "baseDecimals": 9,
+                                "quoteMint": "EM7eDa1KFZeKddqizAWur7yMJytKASPtoQmZxSDNYcKR",
+                                "qti": 0,
+                                "quoteDecimals": 6,
+                                "tickSizeInQuoteBaseUnits": "1000",
+                                "lotSizeInBaseBaseUnits": "1",
+                                "tokenProgramBase": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                                "tokenProgramQuote": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                            }
+                        },
+                        "user": "bNMBfVAEjgxhNruYTR2vSZ92UdVKP2pdZewEG7978Vt",
+                        "privateKey": "53044db873cead13a10478acd042f15541f041d90dc3d90223c30da52ced252208cde2c193eb2fd652d5ccceb8347e4b246df2f6cf412df506c3c51a14b997f7",
+                        "orderId": "123456789",
+                        "side": "B",
+                        "amount": "0.000002",
+                        "price": "17.896",
+                        "timeInForce": "GTC",
+                        "blockhash": "9zp3GFAJpCL3LkizPusx3BFrxdnK47hYmZCypWvkKUT7",
+                        "subAccountIndex": 0,
+                        "marginMode": "cross"
+                    }
+                ],
+                "httpResponseByUrl": {
+                    "account-id": { "accountId": "42" },
+                    "tick-array": { "asks": [{ "start_tick": 17850, "size": "2000" }], "bids": [] },
+                    "order-slots": { "orderSlots": [] },
+                    "referral-state": {},
+                    "rpc.fixture": { "result": "rpc-signature" }
+                },
+                "parsedResponse": {
+                    "signature": "rpc-signature",
+                    "transaction": "AcqDXA/zABhW/4lAMjZztzVtZEM944QCfFciub1+HpFCyzSoCb1MzNRLTmlvycnjbCcxQP7CYOoZY5xd5esYyQOAAQAIFgjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3BkVXx0X37BrXNfHLR+fJDKgh/sClznrQX7EZ7C0LGmwctrAsFyf+s6P1bdlADrnibbSdYK7+SCJffmLclCMjFEAgPOCcScBUVkp+7GDmpgI+F5Hj1AGmzrcKQGq6cgBkQfyY4KFjX72VGpoUdiQEUm946WVqKKdwsQrCLHv8UtBHoD3Zo43EWfjv15Kh310t92R6qlH6frA6uBg2syx4w1l2PDpKUou10keNoRaduI5sKIr8sFsrWgVtzttViV8ynCp2t/B0kg0RNDKDttBKUC5WQy/ymXyAH8y52sre4GektE+by2HtD3Qwehxg2zF81IH8iQfqkX5m15cskSBQJ6ms/qgHPfBFxCsBhNHwzvgyjkDvJYS3dODKC8Df51MIrS/3zwXERUNnjY1BFEzONGyWnIVFeBxl3jejTCQdiHmu2NnQZHwzIDj2Ly9/ZMlHkqekZE3n29H3SDOsE98nkrnBr4fYsbQlnuQ4c8NIhXZnajDdNlK1Mikj9hAbavvI70ucvvSX1FQQAC1vnVAEFvVfJ33xzxXUUKeZwDLdX0cAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpDy/xvdaKH9E+nz+GIiPtwYrLoTY0ShUHJDNmQYgyiloxh7QuDCN6tZGbNPm6GmxIyB6y0qUls/Y567J/7ufzGYyXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZo3y+7VhNj3PfdG1axJQ8MuDC7htIOHyfB9HjrwNH5UnGTw5UytIRaGytEtMgQM1yHQnHteUuX6M0MSGAnYnigPD0dp/4aCcpC9T6a5iuLUAO7fBaciAzzXhIs1GjXze1hazJ6PkzXq0CvYXtyZe1hXmHOboEA58bP9pfxmW0lBYDEgYADQAUDg8BABIGAAkAEA4PAQAVHBUOABETAAwEAQkNCwMQFA8PFRUVFRUHBgUICgIiYAAAAAAAAAAA6EUAAAEVzVsHAAAAAADQBwAAAAAAAAAABQA=",
+                    "blockhash": "9zp3GFAJpCL3LkizPusx3BFrxdnK47hYmZCypWvkKUT7",
+                    "lastValidBlockHeight": null,
+                    "sendOptions": { "encoding": "base64", "preflightCommitment": "confirmed" },
+                    "accountId": "42",
+                    "orderSlots": "RUmrfi6Fo16WjyGueNiprfHPtZzcPtqUi11tRHAYVW3",
+                    "priceInTicks": "17896",
+                    "tickArrays": [
+                        "72DrUPHyPBSvsuBfGoPs6wo19vj82BT9TQTRGHaHrnmX",
+                        "5pbfa9chXfpEPLwhCK7pMMeqJhn4osrjBwkJFTpxJrNe",
+                        "C5wLAN5okH6E4VAz9vubjn7w78FaBrCf2UB5JM5BaJzJ",
+                        "Cf3xP99AZ6d7dawg3VYuTHMfGfGPCcPKNf4QDmYaLKaG",
+                        "2w5zBWgqy82kLUMM6hAwD83UWhuJmnuA93SuR1fQD9uV"
+                    ],
+                    "matchingCount": 5
+                }
+            },
+            {
+                "description": "build and sign a perpetual create-order transaction",
+                "method": "fibeLocalTxCreateOrder",
+                "input": [
+                    {
+                        "rpcUrl": "https://rpc.fixture",
+                        "market": {
+                            "spot": false,
+                            "swap": true,
+                            "info": {
+                                "mt": "P",
+                                "mi": "1",
+                                "marketPubkey": "3TFEPaXhciaFAtAQKa2JdwKeki4294nF4VMkMbfTxdxc",
+                                "baseMint": "22HX2NvQeuid5EUenvRtZtSN4i4wtjqGwqAyN5RJ7zHw",
+                                "baseDecimals": 9,
+                                "quoteMint": "EM7eDa1KFZeKddqizAWur7yMJytKASPtoQmZxSDNYcKR",
+                                "qti": 0,
+                                "quoteDecimals": 6,
+                                "tickSizeInQuoteBaseUnits": "1000",
+                                "lotSizeInBaseBaseUnits": "1"
+                            }
+                        },
+                        "user": "bNMBfVAEjgxhNruYTR2vSZ92UdVKP2pdZewEG7978Vt",
+                        "privateKey": "53044db873cead13a10478acd042f15541f041d90dc3d90223c30da52ced252208cde2c193eb2fd652d5ccceb8347e4b246df2f6cf412df506c3c51a14b997f7",
+                        "orderId": "223456789",
+                        "side": "A",
+                        "amount": "0.000003",
+                        "price": "17.901",
+                        "timeInForce": "FOK",
+                        "blockhash": "9zp3GFAJpCL3LkizPusx3BFrxdnK47hYmZCypWvkKUT7",
+                        "subAccountIndex": 2,
+                        "marginMode": "isolated",
+                        "initialLeverage": 5
+                    }
+                ],
+                "httpResponseByUrl": {
+                    "account-id": { "accountId": "42" },
+                    "tick-array": { "bids": [{ "start_tick": 17850, "size": "3000" }], "asks": [] },
+                    "order-slots": { "orderSlots": [] },
+                    "rpc.fixture": { "result": "rpc-signature" }
+                },
+                "parsedResponse": {
+                    "signature": "rpc-signature",
+                    "transaction": "AaGow1gL/YlWGvEQRGfnrm2/HPKi9VDThbtYzBiLQNp3AdcFw5hgffu5Nzki+0SRCSLq3pZ2nhqk3OyxtqzkBQiAAQAHEgjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3JHCQ1cC6jBs7FKt2QKB6hOqmFhric19fdkk/VCjzTyGYcNLWg7mSHfTCNU8clXKfuG+WhoWPUot1W+SpuHQpjqbKd4qEbdp0/jSCUy7qnRefh26TQXFQLYbSGWZmJBDAucGvh9ixtCWe5Dhzw0iFdmdqMN02UrUyKSP2EBtq+8jCgRsY8Ura67Wtf3/8/OYpVE5By33qbFHipG4L7pwQtsVldDOYeBy30+XBKL+FtgVb0nsKImqfvePveUgocSPkymcEZqUfUWrykcgKgKOJz5waxiHUG0wbvyNtBrNHgFrPuO0XhNvVSoHupAAx8sIn++hyBBd50dnvwz3SE8+BEevtKIf7DxJRWIdNdSqo/FGd8/hznBnCgb0t7twdrvT98QEUXjP0guYFrCy7xr9jKZS44Ezpc7exfAS8zTsM2uIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADGHtC4MI3q1kZs0+boabEjIHrLSpSWz9jnrsn/u5/MZMj+qSRpc98EhPjNepwVBhRCBloEz/nydgCpTG+Ay4Pi4ChksvgbPVX9Ci0OJCeuFsOBfNOWYVNu+ifu5Ze/gAdMjr+ZD4EQ4wQWKesttT08eyPm6tSIyAiDc4plk/kl231KP27JHrjFvBDfzt63Llm+0FJXMCeC5pHIzpOZJDcHw9Haf+GgnKQvU+muYri1ADu3wWnIgM814SLNRo183tYWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAREcEQsMEAAABAUHAQ8NDggREREREREREREKAwkCBi6wAAAAAAAAAALtRQAAARWuUQ0AAAAAAbgLAAAAAAAAAwAAAQUAAAAAAAAAAAAFAA==",
+                    "blockhash": "9zp3GFAJpCL3LkizPusx3BFrxdnK47hYmZCypWvkKUT7",
+                    "lastValidBlockHeight": null,
+                    "sendOptions": { "encoding": "base64", "preflightCommitment": "confirmed" },
+                    "accountId": "42",
+                    "orderSlots": "Ed6TuUNYuhJmhd8REbDkxTVbZnTTYYgCW3HZkLM8vpUh",
+                    "priceInTicks": "17901",
+                    "tickArrays": [
+                        "HDnDBD3eXvDWCHDLUPu7wzb2ftMgnY7WHPGWp1bnrnUy",
+                        "CE5jxVACWhwqoPatysYXWja6DdKwbwcJFaTqJW2Yxizj",
+                        "GsxZ5HgN8PVRv6Cm7gNdVSeHGT829TKxTERyC3JLJhXS",
+                        "BG4kc6KnMcCcLpPKEzvknqicKnt2QB9CDV16NXAKXEFX",
+                        "EHZ3V2PYKgTegSdSX6A5njrzmUqfeZ7iUVtwsCPP3WjV"
+                    ],
+                    "matchingCount": 5
+                }
+            }
+        ],
+        "fibeLocalTxCancelOrder": [
+            {
+                "description": "build and sign a spot client-order-id cancellation transaction",
+                "method": "fibeLocalTxCancelOrder",
+                "input": [
+                    {
+                        "rpcUrl": "https://rpc.fixture",
+                        "market": {
+                            "spot": true,
+                            "swap": false,
+                            "info": {
+                                "mt": "S",
+                                "mi": "1",
+                                "marketPubkey": "5Sau7pWyabqTFmC2bvH5VARGek14EhLsAPcWETUbjjV1",
+                                "baseMint": "22HX2NvQeuid5EUenvRtZtSN4i4wtjqGwqAyN5RJ7zHw",
+                                "baseDecimals": 9,
+                                "quoteMint": "EM7eDa1KFZeKddqizAWur7yMJytKASPtoQmZxSDNYcKR",
+                                "qti": 0,
+                                "quoteDecimals": 6,
+                                "tickSizeInQuoteBaseUnits": "1000",
+                                "lotSizeInBaseBaseUnits": "1",
+                                "tokenProgramBase": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                                "tokenProgramQuote": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                            }
+                        },
+                        "user": "bNMBfVAEjgxhNruYTR2vSZ92UdVKP2pdZewEG7978Vt",
+                        "privateKey": "53044db873cead13a10478acd042f15541f041d90dc3d90223c30da52ced252208cde2c193eb2fd652d5ccceb8347e4b246df2f6cf412df506c3c51a14b997f7",
+                        "orderId": "123456789",
+                        "isClientOrderId": true,
+                        "blockhash": "9zp3GFAJpCL3LkizPusx3BFrxdnK47hYmZCypWvkKUT7",
+                        "subAccountIndex": 0
+                    }
+                ],
+                "httpResponseByUrl": {
+                    "account-id": { "accountId": "42" },
+                    "order-slots": { "orderSlots": [{ "cloid": "123456789", "priceInTicks": 17896, "isTriggerOrder": false }] },
+                    "rpc.fixture": { "result": "rpc-signature" }
+                },
+                "parsedResponse": {
+                    "signature": "rpc-signature",
+                    "transaction": "Adw2r9Z2bM8rdXTyrvvHjtr35FvS50w7Wkm2aPUH7lqqkQKgNqQyOcZPSyJtJZ2vVH5dJgMqxFAdF4kf8iN7FAOAAQAGDwjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3BkVXx0X37BrXNfHLR+fJDKgh/sClznrQX7EZ7C0LGmxAIDzgnEnAVFZKfuxg5qYCPheR49QBps63CkBqunIAZEH8mOChY1+9lRqaFHYkBFJveOllaiincLEKwix7/FLQpLRPm8th7Q90MHocYNsxfNSB/IkH6pF+ZteXLJEgUCeprP6oBz3wRcQrAYTR8M74Mo5A7yWEt3TgygvA3+dTCK7Y2dBkfDMgOPYvL39kyUeSp6RkTefb0fdIM6wT3yeSucGvh9ixtCWe5Dhzw0iFdmdqMN02UrUyKSP2EBtq+8jvS5y+9JfUVBAALW+dUAQW9V8nffHPFdRQp5nAMt1fRwbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpDy/xvdaKH9E+nz+GIiPtwYrLoTY0ShUHJDNmQYgyiloxh7QuDCN6tZGbNPm6GmxIyB6y0qUls/Y567J/7ufzGaN8vu1YTY9z33RtWsSUPDLgwu4bSDh8nwfR468DR+VJxk8OVMrSEWhsrRLTIEDNch0Jx7XlLl+jNDEhgJ2J4oDw9Haf+GgnKQvU+muYri1ADu3wWnIgM814SLNRo183tYWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAQ4QDgsMAAcDAQUIBgIKDQkJBBJhAAAAAAAAAAAAFc1bBwAAAAAA",
+                    "blockhash": "9zp3GFAJpCL3LkizPusx3BFrxdnK47hYmZCypWvkKUT7",
+                    "lastValidBlockHeight": null,
+                    "sendOptions": { "encoding": "base64", "preflightCommitment": "confirmed" },
+                    "accountId": "42",
+                    "orderSlots": "RUmrfi6Fo16WjyGueNiprfHPtZzcPtqUi11tRHAYVW3",
+                    "tickArrays": ["C5wLAN5okH6E4VAz9vubjn7w78FaBrCf2UB5JM5BaJzJ"]
+                }
+            },
+            {
+                "description": "build and sign a perpetual cancel-order transaction",
+                "method": "fibeLocalTxCancelOrder",
+                "input": [
+                    {
+                        "rpcUrl": "https://rpc.fixture",
+                        "market": {
+                            "spot": false,
+                            "swap": true,
+                            "info": {
+                                "mt": "P",
+                                "mi": "1",
+                                "marketPubkey": "3TFEPaXhciaFAtAQKa2JdwKeki4294nF4VMkMbfTxdxc",
+                                "baseMint": "22HX2NvQeuid5EUenvRtZtSN4i4wtjqGwqAyN5RJ7zHw",
+                                "baseDecimals": 9,
+                                "quoteMint": "EM7eDa1KFZeKddqizAWur7yMJytKASPtoQmZxSDNYcKR",
+                                "qti": 0,
+                                "quoteDecimals": 6,
+                                "tickSizeInQuoteBaseUnits": "1000",
+                                "lotSizeInBaseBaseUnits": "1"
+                            }
+                        },
+                        "user": "bNMBfVAEjgxhNruYTR2vSZ92UdVKP2pdZewEG7978Vt",
+                        "privateKey": "53044db873cead13a10478acd042f15541f041d90dc3d90223c30da52ced252208cde2c193eb2fd652d5ccceb8347e4b246df2f6cf412df506c3c51a14b997f7",
+                        "orderId": "223456789",
+                        "isClientOrderId": false,
+                        "blockhash": "9zp3GFAJpCL3LkizPusx3BFrxdnK47hYmZCypWvkKUT7",
+                        "subAccountIndex": 2
+                    }
+                ],
+                "httpResponseByUrl": {
+                    "account-id": { "accountId": "42" },
+                    "order-slots": { "orderSlots": [{ "oid": "223456789", "priceInTicks": 17901, "isTriggerOrder": false }] },
+                    "rpc.fixture": { "result": "rpc-signature" }
+                },
+                "parsedResponse": {
+                    "signature": "rpc-signature",
+                    "transaction": "Af4tWog4R6GqJ2O9TpzidSjU3rGWmWt/ZsDAT4vfWkCfhHOUQtAMg0c91lgWksghlQCdrsia7O6c+j8Qg0CM3gqAAQAGDAjN4sGT6y/WUtXMzrg0fkskbfL2z0Et9QbDxRoUuZf3JHCQ1cC6jBs7FKt2QKB6hOqmFhric19fdkk/VCjzTyG5wa+H2LG0JZ7kOHPDSIV2Z2ow3TZStTIpI/YQG2r7yMKBGxjxStrrta1/f/z85ilUTkHLfepsUeKkbgvunBC2ymcEZqUfUWrykcgKgKOJz5waxiHUG0wbvyNtBrNHgFrr7SiH+w8SUViHTXUqqPxRnfP4c5wZwoG9Le7cHa70/QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMYe0LgwjerWRmzT5uhpsSMgestKlJbP2Oeuyf+7n8xkyP6pJGlz3wSE+M16nBUGFEIGWgTP+fJ2AKlMb4DLg+NMjr+ZD4EQ4wQWKesttT08eyPm6tSIyAiDc4plk/kl231KP27JHrjFvBDfzt63Llm+0FJXMCeC5pHIzpOZJDcHw9Haf+GgnKQvU+muYri1ADu3wWnIgM814SLNRo183tYWsyej5M16tAr2F7cmXtYV5hzm6BAOfGz/aX8ZltJQWAQsNCwYABwoAAgMEAQkIBROxAAAAAAAAAAIBFa5RDQAAAAAAAA==",
+                    "blockhash": "9zp3GFAJpCL3LkizPusx3BFrxdnK47hYmZCypWvkKUT7",
+                    "lastValidBlockHeight": null,
+                    "sendOptions": { "encoding": "base64", "preflightCommitment": "confirmed" },
+                    "accountId": "42",
+                    "orderSlots": "Ed6TuUNYuhJmhd8REbDkxTVbZnTTYYgCW3HZkLM8vpUh",
+                    "tickArrays": ["GsxZ5HgN8PVRv6Cm7gNdVSeHGT829TKxTERyC3JLJhXS"]
+                }
+            }
         ]
     }
 }

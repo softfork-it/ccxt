@@ -1,5 +1,3 @@
-// AUTO_TRANSPILE_ENABLED
-
 import testAggregate from './test.aggregate.js';
 import testDecimalToPrecision from './test.decimalToPrecision.js';
 import testBinaryToBase16 from './test.binaryToBase16.js';
@@ -67,7 +65,6 @@ import testBase58ToBinary from './test.base58ToBinary.js';
 import testIsJsonEncodedObject from './test.isJsonEncodedObject.js';
 import testIsDictionary from './test.isDictionary.js';
 import testEncodeDecode from './test.encodeDecode.js';
-import testFibeTransactionVectors from './test.fibeTransactionVectors.js';
 
 async function baseTestsInit () {
     await testLanguageSpecific ();
@@ -137,7 +134,6 @@ async function baseTestsInit () {
     testIo ();
     testIsJsonEncodedObject ();
     testEncodeDecode ();
-    testFibeTransactionVectors ();
     return true;
 }
 
