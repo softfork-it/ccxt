@@ -383,22 +383,39 @@ export default class fibe extends Exchange {
     /**
      * @method
      * @name fibe#fetchBalance
-     * @description query spot funds held by open orders for a user, free and total wallet balances are not exposed by this endpoint
-     * @see https://fb-4b8448ac.alephium.org/api/v1/spot-state
+     * @description query spot wallet balances and funds held by open orders for a user
+     * @see https://api.devnet.fibe.trade/api/v1/spot-state
      * @param {object} [params] extra parameters specific to the exchange API endpoint
      * @param {string} [params.user] user address, will default to this.walletAddress if not provided
-     * @param {string} [params.accountId] resolved account id, bypasses the account-id request
-     * @param {int} [params.subAccountIndex] account subindex used to resolve params.accountId, defaults to 0
+     * @param {int} [params.subAccountIndex] account subindex used to resolve the user's account id, defaults to 0
+     * @param {string} [params.rpcUrl] Solana RPC endpoint
+     * @param {string} [params.commitment] Solana commitment for balance RPC calls, defaults to confirmed
      * @returns {object} a [balance structure]{@link https://docs.ccxt.com/#/?id=balance-structure}
      */
     override async fetchBalance (params = {}): Promise<Balances> {
-        let accountId = undefined;
-        const accountIdResponse = await this.fibeAccountId ('fetchBalance', params);
-        [ accountId, params ] = accountIdResponse;
-        const request: Dict = {
-            'aid': accountId,
-        };
-        const response = await this.publicGetSpotState (this.extend (request, params));
+        await this.loadMarkets ();
+        let requestParams = params;
+        let userAddress = undefined;
+        [ userAddress, requestParams ] = this.handlePublicAddress ('fetchBalance', requestParams);
+        let rpcUrl = undefined;
+        [ rpcUrl, requestParams ] = this.handleOptionAndParams (requestParams, 'fetchBalance', 'rpcUrl', this.safeString (this.options, 'rpcUrl'));
+        let commitment = undefined;
+        [ commitment, requestParams ] = this.handleOptionAndParams (requestParams, 'fetchBalance', 'commitment', this.safeString (this.options, 'commitment', 'confirmed'));
+        if (this.safeValue (requestParams, 'accountId') !== undefined) {
+            throw new BadRequest (this.id + ' fetchBalance() does not accept accountId; use user or walletAddress');
+        }
+        let subAccountIndex = undefined;
+        [ subAccountIndex, requestParams ] = this.handleOptionAndParams (requestParams, 'fetchBalance', 'subAccountIndex', 0);
+        subAccountIndex = this.fibeValidateU8Param ('fetchBalance', 'subAccountIndex', subAccountIndex);
+        const accountIdResponse = await this.publicGetAccountId ({
+            'owner': userAddress,
+            'subAccountIndex': subAccountIndex,
+        });
+        const accountId = this.safeString (accountIdResponse, 'accountId');
+        let response: Dict = { 'balances': [] };
+        if (accountId !== undefined) {
+            response = await this.publicGetSpotState (this.extend ({ 'aid': accountId }, requestParams));
+        }
         //
         //     {
         //         "aid": "42",
@@ -409,6 +426,7 @@ export default class fibe extends Exchange {
         //
         const balances = this.safeList (response, 'balances', []);
         const result: Dict = { 'info': response };
+        const holds: Dict = {};
         for (let i = 0; i < balances.length; i++) {
             const balance = balances[i];
             const currencyId = this.safeString (balance, 'symbol');
@@ -416,8 +434,68 @@ export default class fibe extends Exchange {
             if (code === undefined) {
                 continue;
             }
+            holds[code] = this.safeString (balance, 'hold', '0');
             const account = this.account ();
-            account['used'] = this.safeString (balance, 'hold');
+            account['used'] = holds[code];
+            result[code] = account;
+        }
+        const currencies: Dict = {};
+        for (let i = 0; i < this.symbols.length; i++) {
+            const symbol = this.symbols[i];
+            if (symbol === undefined) {
+                continue;
+            }
+            const market = this.market (symbol);
+            if (market['spot'] === true) {
+                const info = market['info'];
+                const base = market['base'];
+                const quote = market['quote'];
+                if (!(base in currencies)) {
+                    currencies[base] = {
+                        'mint': market['baseId'],
+                        'decimals': this.safeInteger (info, 'baseDecimals'),
+                        'tokenProgram': this.safeString (info, 'tokenProgramBase'),
+                    };
+                }
+                if (!(quote in currencies)) {
+                    currencies[quote] = {
+                        'mint': market['quoteId'],
+                        'decimals': this.safeInteger (info, 'quoteDecimals'),
+                        'tokenProgram': this.safeString (info, 'tokenProgramQuote'),
+                    };
+                }
+            }
+        }
+        const codes = Object.keys (currencies);
+        for (let i = 0; i < codes.length; i++) {
+            const code = codes[i];
+            const currency = currencies[code];
+            const mint = this.safeString (currency, 'mint');
+            const decimals = this.safeInteger (currency, 'decimals');
+            const tokenProgram = await this.solanaGetTokenProgram (rpcUrl, mint, this.safeString (currency, 'tokenProgram'), commitment);
+            const tokenAccount = this.solanaGetAssociatedTokenAddress (mint, userAddress, tokenProgram);
+            const tokenAccountInfo = await this.solanaGetAccountInfo (rpcUrl, tokenAccount, commitment);
+            let rawFree = '0';
+            if (tokenAccountInfo !== undefined) {
+                const tokenAccountHex = this.binaryToBase16 (tokenAccountInfo['data']);
+                if (tokenAccountHex.length < 144) {
+                    throw new ExchangeError (this.id + ' invalid Solana token account ' + tokenAccount);
+                }
+                rawFree = this.solanaReadU64FromHex (tokenAccountHex, 64);
+            }
+            if (mint === this.solanaNativeMint ()) {
+                const ownerAccountInfo = await this.solanaGetAccountInfo (rpcUrl, userAddress, commitment);
+                if (ownerAccountInfo !== undefined) {
+                    const totalFree = Precise.stringAdd (rawFree, this.safeString (ownerAccountInfo, 'lamports', '0'));
+                    if (totalFree !== undefined) {
+                        rawFree = totalFree;
+                    }
+                }
+            }
+            const account = this.account ();
+            account['free'] = Precise.stringMul (rawFree, this.parsePrecision (this.numberToString (decimals)));
+            account['used'] = this.safeString (holds, code, '0');
+            account['total'] = Precise.stringAdd (account['free'], account['used']);
             result[code] = account;
         }
         return this.safeBalance (result);
@@ -3366,6 +3444,7 @@ export default class fibe extends Exchange {
         }
         return {
             'owner': this.safeString (value, 'owner'),
+            'lamports': this.safeString (value, 'lamports'),
             'data': this.base64ToBinary (data[0]),
         };
     }

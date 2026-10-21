@@ -9,12 +9,6 @@
                 "method": "fetchBalance",
                 "url": "https://api.devnet.fibe.trade/api/v1/account-id?owner=wallet&subAccountIndex=0",
                 "input": []
-            },
-            {
-                "description": "fetchBalance requests balances by account id",
-                "method": "fetchBalance",
-                "url": "https://api.devnet.fibe.trade/api/v1/spot-state?aid=42",
-                "input": [{"accountId": "42", "user": "ignored-owner"}]
             }
         ],
         "fetchPositions": [

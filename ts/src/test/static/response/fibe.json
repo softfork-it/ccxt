@@ -604,8 +604,104 @@
             {
                 "description": "fetchBalance spot",
                 "method": "fetchBalance",
-                "input": [{ "accountId": "42" }],
+                "input": [{ "user": "bNMBfVAEjgxhNruYTR2vSZ92UdVKP2pdZewEG7978Vt" }],
                 "httpResponse": {
+                    "accountId": "42",
+                    "aid": "42",
+                    "balances": [
+                        {
+                            "symbol": "USDC",
+                            "hold": "25",
+                            "entryNtl": "100"
+                        },
+                        {
+                            "symbol": "UNLISTED",
+                            "hold": "7",
+                            "entryNtl": "0"
+                        }
+                    ],
+                    "result": {
+                        "value": {
+                            "lamports": 2500000000,
+                            "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                            "data": [
+                                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvaFkAAAAA",
+                                "base64"
+                            ]
+                        }
+                    }
+                },
+                "parsedResponse": {
+                    "info": {
+                        "accountId": "42",
+                        "aid": "42",
+                        "balances": [
+                            {
+                                "symbol": "USDC",
+                                "hold": "25",
+                                "entryNtl": "100"
+                            },
+                            {
+                                "symbol": "UNLISTED",
+                                "hold": "7",
+                                "entryNtl": "0"
+                            }
+                        ],
+                        "result": {
+                            "value": {
+                                "lamports": 2500000000,
+                                "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                                "data": [
+                                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvaFkAAAAA",
+                                    "base64"
+                                ]
+                            }
+                        }
+                    },
+                    "SOL": {
+                        "free": 4,
+                        "used": 0,
+                        "total": 4
+                    },
+                    "USDC": {
+                        "free": 1500,
+                        "used": 25,
+                        "total": 1525
+                    },
+                    "UNLISTED": {
+                        "free": null,
+                        "used": 7,
+                        "total": null
+                    },
+                    "free": {
+                        "SOL": 4,
+                        "USDC": 1500,
+                        "UNLISTED": null
+                    },
+                    "used": {
+                        "SOL": 0,
+                        "USDC": 25,
+                        "UNLISTED": 7
+                    },
+                    "total": {
+                        "SOL": 4,
+                        "USDC": 1525,
+                        "UNLISTED": null
+                    }
+                }
+            },
+            {
+                "description": "fetchBalance missing token accounts",
+                "method": "fetchBalance",
+                "input": [{ "user": "bNMBfVAEjgxhNruYTR2vSZ92UdVKP2pdZewEG7978Vt" }],
+                "options": {
+                    "tokenPrograms": {
+                        "So11111111111111111111111111111111111111112": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                        "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                    }
+                },
+                "httpResponse": {
+                    "accountId": "42",
                     "aid": "42",
                     "balances": [
                         {
@@ -613,10 +709,14 @@
                             "hold": "25",
                             "entryNtl": "100"
                         }
-                    ]
+                    ],
+                    "result": {
+                        "value": null
+                    }
                 },
                 "parsedResponse": {
                     "info": {
+                        "accountId": "42",
                         "aid": "42",
                         "balances": [
                             {
@@ -624,21 +724,76 @@
                                 "hold": "25",
                                 "entryNtl": "100"
                             }
-                        ]
+                        ],
+                        "result": {
+                            "value": null
+                        }
+                    },
+                    "SOL": {
+                        "free": 0,
+                        "used": 0,
+                        "total": 0
                     },
                     "USDC": {
-                        "free": null,
+                        "free": 0,
                         "used": 25,
-                        "total": null
+                        "total": 25
                     },
                     "free": {
-                        "USDC": null
+                        "SOL": 0,
+                        "USDC": 0
                     },
                     "used": {
+                        "SOL": 0,
                         "USDC": 25
                     },
                     "total": {
-                        "USDC": null
+                        "SOL": 0,
+                        "USDC": 25
+                    }
+                }
+            },
+            {
+                "description": "fetchBalance wallet without a Fibe account",
+                "method": "fetchBalance",
+                "input": [{ "user": "bNMBfVAEjgxhNruYTR2vSZ92UdVKP2pdZewEG7978Vt" }],
+                "options": {
+                    "tokenPrograms": {
+                        "So11111111111111111111111111111111111111112": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                        "J4GBibSV55ej8gSNBKYuvUPwnmtWvVxw6BzrgSbearov": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                    }
+                },
+                "httpResponse": {
+                    "accountId": null,
+                    "result": {
+                        "value": null
+                    }
+                },
+                "parsedResponse": {
+                    "info": {
+                        "balances": []
+                    },
+                    "SOL": {
+                        "free": 0,
+                        "used": 0,
+                        "total": 0
+                    },
+                    "USDC": {
+                        "free": 0,
+                        "used": 0,
+                        "total": 0
+                    },
+                    "free": {
+                        "SOL": 0,
+                        "USDC": 0
+                    },
+                    "used": {
+                        "SOL": 0,
+                        "USDC": 0
+                    },
+                    "total": {
+                        "SOL": 0,
+                        "USDC": 0
                     }
                 }
             }
