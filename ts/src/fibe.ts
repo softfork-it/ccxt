@@ -5,8 +5,8 @@ import Exchange from './abstract/fibe.js';
 import { ArgumentsRequired, AuthenticationError, BadRequest, ExchangeError, InvalidOrder, OrderNotFound, RateLimitExceeded } from './base/errors.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { eddsa } from './base/functions/crypto.js';
-import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
-import { ed25519 } from './static_dependencies/noble-curves/ed25519.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { ed25519 } from '@noble/curves/ed25519.js';
 import { Precise } from './base/Precise.js';
 import type { Balances, Dict, FundingHistory, FundingRate, FundingRates, Market, Num, OHLCV, Order, OrderBook, OrderSide, OrderType, Position, Strings, Ticker, Tickers, Trade, TradingFeeInterface, TradingFees, Str, Int, int } from './base/types.js';
 
@@ -208,7 +208,9 @@ export default class fibe extends Exchange {
                         'recent-market-trades': 1,
                         'candles': 1,
                         'account-id': 1,
+                        'next-account-id': 1,
                         'order': 1,
+                        'order-slots': 1,
                         'open-orders': 1,
                         'historical-orders': 1,
                         'spot-state': 1,
@@ -217,6 +219,8 @@ export default class fibe extends Exchange {
                         'user-fees': 1,
                         'user-funding-history': 1,
                         'user-trades': 1,
+                        'referral-state': 1,
+                        'tick-array': 1,
                     },
                 },
             },
@@ -1409,7 +1413,7 @@ export default class fibe extends Exchange {
      * @param {string} [params.user] user address, must match privateKey public key if provided
      * @param {string} [params.rpcUrl] Solana RPC endpoint
      * @param {string} [params.orderId] on-chain client order id
-     * @param {string} [params.timeInForce] GTC, IOC, PO, or FOK; market orders always use IOC
+     * @param {string} [params.timeInForce] GTC, IOC, PO, or FOK; unified market orders use IOC and serialize the DEX FrontendMarket variant
      * @param {number} [params.slippage] market-order slippage fraction, defaults to 0.05
      * @param {boolean} [params.postOnly] equivalent to timeInForce PO
      * @param {string} [params.commitment] Solana commitment for account/blockhash RPC calls, defaults to confirmed
@@ -1421,10 +1425,11 @@ export default class fibe extends Exchange {
      * @param {string|int} [params.computeUnitPriceMicroLamports] optional Solana compute unit price in micro-lamports
      * @param {int} [params.subAccountIndex] perp subaccount index, defaults to 0
      * @param {string} [params.marginMode] perp margin mode, defaults to cross
-     * @param {int} [params.initialLeverage] optional perp initial leverage
+     * @param {int} [params.leverage] required when opening a new perp position; when provided, must match the leverage of an existing position
      * @returns {Order} an order structure
      */
-    async createOrder (symbol: string, type: OrderType, side: OrderSide, amount: number, price: Num = undefined, params = {}): Promise<Order> {
+    override async createOrder (symbol: string, type: OrderType, side: OrderSide, amount: number, price: Num = undefined, params = {}): Promise<Order> {
+        let requestParams = params;
         const orderType = type.toLowerCase ();
         const isLimitOrder = (orderType === 'limit');
         const isMarketOrder = (orderType === 'market');
@@ -1436,13 +1441,18 @@ export default class fibe extends Exchange {
         }
         await this.loadMarkets ();
         const market = this.market (symbol);
+        const marketInfo = market['info'];
+        const executionMode = this.safeString (marketInfo, 'executionMode', 'active').toLowerCase ();
+        if (executionMode === 'closeonly') {
+            throw new InvalidOrder (this.id + ' createOrder() cannot open orders while the market is closeOnly');
+        }
         const orderSide = side.toLowerCase ();
         const isBuy = (orderSide === 'buy');
         if (!isBuy && (orderSide !== 'sell')) {
             throw new InvalidOrder (this.id + ' createOrder() side must be buy or sell');
         }
         let privateKey = undefined;
-        [ privateKey, params ] = this.handleOptionAndParams (params, 'createOrder', 'privateKey', this.privateKey);
+        [ privateKey, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'privateKey', this.privateKey);
         if (privateKey !== undefined) {
             privateKey = privateKey.trim ();
         }
@@ -1450,20 +1460,23 @@ export default class fibe extends Exchange {
             throw new ArgumentsRequired (this.id + ' createOrder() requires a privateKey parameter or exchange.privateKey');
         }
         let user = undefined;
-        [ user, params ] = this.handlePublicAddress ('createOrder', params);
+        [ user, requestParams ] = this.handlePublicAddress ('createOrder', requestParams);
         let rpcUrl = undefined;
-        [ rpcUrl, params ] = this.handleOptionAndParams (params, 'createOrder', 'rpcUrl', this.safeString (this.options, 'rpcUrl'));
+        [ rpcUrl, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'rpcUrl', this.safeString (this.options, 'rpcUrl'));
         let orderId = undefined;
-        [ orderId, params ] = this.handleOptionAndParams2 (params, 'createOrder', 'orderId', 'clientOrderId');
+        [ orderId, requestParams ] = this.handleOptionAndParams2 (requestParams, 'createOrder', 'orderId', 'clientOrderId');
         if (orderId === undefined) {
             orderId = this.fibeNewOrderId ();
         }
         orderId = this.fibeValidateUnsignedIntegerParam ('createOrder', 'orderId', orderId);
+        if (!Precise.stringGt (orderId, '0')) {
+            throw new InvalidOrder (this.id + ' createOrder() orderId must be greater than zero');
+        }
         let postOnly = undefined;
-        [ postOnly, params ] = this.handlePostOnly (false, false, params);
-        params = this.omit (params, 'postOnly');
+        [ postOnly, requestParams ] = this.handlePostOnly (false, false, requestParams);
+        requestParams = this.omit (requestParams, 'postOnly');
         let timeInForce = undefined;
-        [ timeInForce, params ] = this.handleOptionAndParams (params, 'createOrder', 'timeInForce');
+        [ timeInForce, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'timeInForce');
         if (isMarketOrder) {
             if (postOnly) {
                 throw new InvalidOrder (this.id + ' createOrder() market orders cannot be postOnly');
@@ -1478,8 +1491,15 @@ export default class fibe extends Exchange {
             timeInForce = 'IOC';
         }
         const fibeTimeInForce = this.encodeCreateOrderTimeInForce (timeInForce, postOnly);
+        let transactionTimeInForce = fibeTimeInForce;
+        if (isMarketOrder) {
+            transactionTimeInForce = 'FrontendMarket';
+        }
+        if ((executionMode === 'postonly') && (transactionTimeInForce !== 'ALO')) {
+            throw new InvalidOrder (this.id + ' createOrder() requires postOnly while the market is postOnly');
+        }
         let slippage = undefined;
-        [ slippage, params ] = this.handleOptionAndParams (params, 'createOrder', 'slippage');
+        [ slippage, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'slippage');
         if (isLimitOrder && (slippage !== undefined)) {
             throw new InvalidOrder (this.id + ' createOrder() slippage is only supported for market orders');
         }
@@ -1493,37 +1513,49 @@ export default class fibe extends Exchange {
             }
         }
         let subAccountIndex = undefined;
-        [ subAccountIndex, params ] = this.handleOptionAndParams (params, 'createOrder', 'subAccountIndex', 0);
+        [ subAccountIndex, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'subAccountIndex', 0);
         subAccountIndex = this.fibeValidateU8Param ('createOrder', 'subAccountIndex', subAccountIndex);
+        const isolatedOnly = this.safeBool (market, 'swap', false) && this.safeBool (marketInfo, 'isolatedOnly', false);
+        let defaultMarginMode = 'cross';
+        if (isolatedOnly) {
+            defaultMarginMode = 'isolated';
+        }
         let marginMode = undefined;
-        [ marginMode, params ] = this.handleOptionAndParams (params, 'createOrder', 'marginMode', 'cross');
+        [ marginMode, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'marginMode', defaultMarginMode);
         marginMode = this.fibeNormalizeMarginMode ('createOrder', marginMode);
+        if (isolatedOnly && (marginMode !== 'isolated')) {
+            throw new InvalidOrder (this.id + ' createOrder() requires isolated margin for this market');
+        }
         let initialLeverage = undefined;
-        [ initialLeverage, params ] = this.handleOptionAndParams (params, 'createOrder', 'initialLeverage');
+        [ initialLeverage, requestParams ] = this.handleOptionAndParams2 (requestParams, 'createOrder', 'leverage', 'initialLeverage');
         if (initialLeverage !== undefined) {
-            initialLeverage = this.fibeValidateU8Param ('createOrder', 'initialLeverage', initialLeverage, 1);
+            initialLeverage = this.fibeValidateU8Param ('createOrder', 'leverage', initialLeverage, 1);
+            const maxLeverage = this.safeInteger (marketInfo, 'maxLeverage');
+            if ((maxLeverage !== undefined) && (initialLeverage > maxLeverage)) {
+                throw new InvalidOrder (this.id + ' createOrder() leverage exceeds the market maximum of ' + this.numberToString (maxLeverage));
+            }
         }
         let commitment = undefined;
-        [ commitment, params ] = this.handleOptionAndParams (params, 'createOrder', 'commitment', this.safeString (this.options, 'commitment', 'confirmed'));
+        [ commitment, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'commitment', this.safeString (this.options, 'commitment', 'confirmed'));
         let preflightCommitment = undefined;
-        [ preflightCommitment, params ] = this.handleOptionAndParams (params, 'createOrder', 'preflightCommitment');
+        [ preflightCommitment, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'preflightCommitment');
         let skipPreflight = undefined;
-        [ skipPreflight, params ] = this.handleOptionAndParams (params, 'createOrder', 'skipPreflight');
+        [ skipPreflight, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'skipPreflight');
         let maxRetries = undefined;
-        [ maxRetries, params ] = this.handleOptionAndParams (params, 'createOrder', 'maxRetries');
+        [ maxRetries, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'maxRetries');
         let minContextSlot = undefined;
-        [ minContextSlot, params ] = this.handleOptionAndParams (params, 'createOrder', 'minContextSlot');
+        [ minContextSlot, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'minContextSlot');
         let computeUnitLimit = undefined;
-        [ computeUnitLimit, params ] = this.handleOptionAndParams (params, 'createOrder', 'computeUnitLimit');
+        [ computeUnitLimit, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'computeUnitLimit');
         if (computeUnitLimit !== undefined) {
             computeUnitLimit = this.fibeValidateU32Param ('createOrder', 'computeUnitLimit', computeUnitLimit);
         }
         let computeUnitPriceMicroLamports = undefined;
-        [ computeUnitPriceMicroLamports, params ] = this.handleOptionAndParams (params, 'createOrder', 'computeUnitPriceMicroLamports');
+        [ computeUnitPriceMicroLamports, requestParams ] = this.handleOptionAndParams (requestParams, 'createOrder', 'computeUnitPriceMicroLamports');
         if (computeUnitPriceMicroLamports !== undefined) {
             computeUnitPriceMicroLamports = this.fibeValidateUnsignedIntegerParam ('createOrder', 'computeUnitPriceMicroLamports', computeUnitPriceMicroLamports);
         }
-        if (!this.isEmpty (params)) {
+        if (!this.isEmpty (requestParams)) {
             throw new ExchangeError (this.id + ' createOrder() local transaction construction does not support extra params');
         }
         const amountString = this.amountToPrecision (symbol, amount);
@@ -1553,7 +1585,7 @@ export default class fibe extends Exchange {
             'amount': amountString,
             'price': priceString,
             'slippage': slippage,
-            'timeInForce': fibeTimeInForce,
+            'timeInForce': transactionTimeInForce,
             'commitment': commitment,
             'preflightCommitment': preflightCommitment,
             'skipPreflight': skipPreflight,
@@ -1567,12 +1599,12 @@ export default class fibe extends Exchange {
         });
         let orderPrice = undefined;
         if (isLimitOrder) {
-            const marketInfo = market['info'];
-            orderPrice = this.fibeTicksToPrice (this.safeString (result, 'priceInTicks'), this.safeInteger (marketInfo, 'quoteDecimals'), this.safeString (marketInfo, 'tickSizeInQuoteBaseUnits'));
+            const priceMarketInfo = market['info'];
+            orderPrice = this.fibeTicksToPrice (this.safeString (result, 'priceInTicks'), this.safeInteger (priceMarketInfo, 'quoteDecimals'), this.safeString (priceMarketInfo, 'tickSizeInQuoteBaseUnits'));
         }
         return this.safeOrder ({
             'info': result,
-            'id': orderId,
+            'id': undefined,
             'clientOrderId': orderId,
             'timestamp': undefined,
             'datetime': undefined,
@@ -1615,17 +1647,26 @@ export default class fibe extends Exchange {
      * @param {int} [params.computeUnitLimit] optional Solana compute budget unit limit
      * @param {string|int} [params.computeUnitPriceMicroLamports] optional Solana compute unit price in micro-lamports
      * @param {int} [params.subAccountIndex] perp subaccount index, defaults to 0
+     * @param {boolean|string} [params.clientOrderId] cancel by client order id; when a string is supplied it replaces id
      * @returns {Order} an order structure
      */
-    async cancelOrder (id: string, symbol: Str = undefined, params = {}): Promise<Order> {
+    override async cancelOrder (id: string, symbol: Str = undefined, params = {}): Promise<Order> {
         if (symbol === undefined) {
             throw new ArgumentsRequired (this.id + ' cancelOrder() requires a symbol for local tx construction');
         }
-        id = this.fibeValidateUnsignedIntegerParam ('cancelOrder', 'id', id);
+        let requestParams = params;
+        let clientOrderId = undefined;
+        [ clientOrderId, requestParams ] = this.handleOptionAndParams (requestParams, 'cancelOrder', 'clientOrderId');
+        const isClientOrderId = (clientOrderId !== undefined) && (clientOrderId !== false);
+        let orderReference = id;
+        if (typeof clientOrderId === 'string') {
+            orderReference = clientOrderId;
+        }
+        orderReference = this.fibeValidateUnsignedIntegerParam ('cancelOrder', 'id', orderReference);
         await this.loadMarkets ();
         const market = this.market (symbol);
         let privateKey = undefined;
-        [ privateKey, params ] = this.handleOptionAndParams (params, 'cancelOrder', 'privateKey', this.privateKey);
+        [ privateKey, requestParams ] = this.handleOptionAndParams (requestParams, 'cancelOrder', 'privateKey', this.privateKey);
         if (privateKey !== undefined) {
             privateKey = privateKey.trim ();
         }
@@ -1633,33 +1674,33 @@ export default class fibe extends Exchange {
             throw new ArgumentsRequired (this.id + ' cancelOrder() requires a privateKey parameter or exchange.privateKey');
         }
         let user = undefined;
-        [ user, params ] = this.handlePublicAddress ('cancelOrder', params);
+        [ user, requestParams ] = this.handlePublicAddress ('cancelOrder', requestParams);
         let rpcUrl = undefined;
-        [ rpcUrl, params ] = this.handleOptionAndParams (params, 'cancelOrder', 'rpcUrl', this.safeString (this.options, 'rpcUrl'));
+        [ rpcUrl, requestParams ] = this.handleOptionAndParams (requestParams, 'cancelOrder', 'rpcUrl', this.safeString (this.options, 'rpcUrl'));
         let subAccountIndex = undefined;
-        [ subAccountIndex, params ] = this.handleOptionAndParams (params, 'cancelOrder', 'subAccountIndex', 0);
+        [ subAccountIndex, requestParams ] = this.handleOptionAndParams (requestParams, 'cancelOrder', 'subAccountIndex', 0);
         subAccountIndex = this.fibeValidateU8Param ('cancelOrder', 'subAccountIndex', subAccountIndex);
         let commitment = undefined;
-        [ commitment, params ] = this.handleOptionAndParams (params, 'cancelOrder', 'commitment', this.safeString (this.options, 'commitment', 'confirmed'));
+        [ commitment, requestParams ] = this.handleOptionAndParams (requestParams, 'cancelOrder', 'commitment', this.safeString (this.options, 'commitment', 'confirmed'));
         let preflightCommitment = undefined;
-        [ preflightCommitment, params ] = this.handleOptionAndParams (params, 'cancelOrder', 'preflightCommitment');
+        [ preflightCommitment, requestParams ] = this.handleOptionAndParams (requestParams, 'cancelOrder', 'preflightCommitment');
         let skipPreflight = undefined;
-        [ skipPreflight, params ] = this.handleOptionAndParams (params, 'cancelOrder', 'skipPreflight');
+        [ skipPreflight, requestParams ] = this.handleOptionAndParams (requestParams, 'cancelOrder', 'skipPreflight');
         let maxRetries = undefined;
-        [ maxRetries, params ] = this.handleOptionAndParams (params, 'cancelOrder', 'maxRetries');
+        [ maxRetries, requestParams ] = this.handleOptionAndParams (requestParams, 'cancelOrder', 'maxRetries');
         let minContextSlot = undefined;
-        [ minContextSlot, params ] = this.handleOptionAndParams (params, 'cancelOrder', 'minContextSlot');
+        [ minContextSlot, requestParams ] = this.handleOptionAndParams (requestParams, 'cancelOrder', 'minContextSlot');
         let computeUnitLimit = undefined;
-        [ computeUnitLimit, params ] = this.handleOptionAndParams (params, 'cancelOrder', 'computeUnitLimit');
+        [ computeUnitLimit, requestParams ] = this.handleOptionAndParams (requestParams, 'cancelOrder', 'computeUnitLimit');
         if (computeUnitLimit !== undefined) {
             computeUnitLimit = this.fibeValidateU32Param ('cancelOrder', 'computeUnitLimit', computeUnitLimit);
         }
         let computeUnitPriceMicroLamports = undefined;
-        [ computeUnitPriceMicroLamports, params ] = this.handleOptionAndParams (params, 'cancelOrder', 'computeUnitPriceMicroLamports');
+        [ computeUnitPriceMicroLamports, requestParams ] = this.handleOptionAndParams (requestParams, 'cancelOrder', 'computeUnitPriceMicroLamports');
         if (computeUnitPriceMicroLamports !== undefined) {
             computeUnitPriceMicroLamports = this.fibeValidateUnsignedIntegerParam ('cancelOrder', 'computeUnitPriceMicroLamports', computeUnitPriceMicroLamports);
         }
-        if (!this.isEmpty (params)) {
+        if (!this.isEmpty (requestParams)) {
             throw new ExchangeError (this.id + ' cancelOrder() local transaction construction does not support extra params');
         }
         const result = await this.fibeLocalTxCancelOrder ({
@@ -1667,7 +1708,8 @@ export default class fibe extends Exchange {
             'market': market,
             'user': user,
             'privateKey': privateKey,
-            'orderId': id,
+            'orderId': orderReference,
+            'isClientOrderId': isClientOrderId,
             'subAccountIndex': subAccountIndex,
             'commitment': commitment,
             'preflightCommitment': preflightCommitment,
@@ -1679,8 +1721,8 @@ export default class fibe extends Exchange {
         });
         return this.safeOrder ({
             'info': result,
-            'id': id,
-            'clientOrderId': id,
+            'id': isClientOrderId ? undefined : orderReference,
+            'clientOrderId': isClientOrderId ? orderReference : undefined,
             'timestamp': undefined,
             'datetime': undefined,
             'lastTradeTimestamp': undefined,
@@ -1833,31 +1875,31 @@ export default class fibe extends Exchange {
         }, market);
     }
 
-    fibeProgramId () {
-        return '24d8kVRSuEy4onKWSfvSUutDbXnSgdoPYMGqMwTQ1aRU';
+    fibeProgramId (): string {
+        return 'HDb42K3Xyj2swE9nk2qc3aVUyVNFRd4jEGmHQiovjhpG';
     }
 
-    solanaSystemProgramId () {
+    solanaSystemProgramId (): string {
         return '11111111111111111111111111111111';
     }
 
-    solanaAssociatedTokenProgramId () {
+    solanaAssociatedTokenProgramId (): string {
         return 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
     }
 
-    solanaComputeBudgetProgramId () {
+    solanaComputeBudgetProgramId (): string {
         return 'ComputeBudget111111111111111111111111111111';
     }
 
-    solanaNativeMint () {
+    solanaNativeMint (): string {
         return 'So11111111111111111111111111111111111111112';
     }
 
-    solanaHexAlphabet () {
+    solanaHexAlphabet (): string {
         return '0123456789abcdef';
     }
 
-    solanaHexNibble (value) {
+    solanaHexNibble (value: any): number {
         const lower = this.solanaHexAlphabet ();
         const upper = '0123456789ABCDEF';
         for (let i = 0; i < 16; i++) {
@@ -1868,18 +1910,18 @@ export default class fibe extends Exchange {
         throw new ExchangeError (this.id + ' invalid hex character ' + value);
     }
 
-    solanaHexByte (hex, index): number {
+    solanaHexByte (hex: string, index: int): number {
         const hi = this.solanaHexNibble (hex[index]);
         const lo = this.solanaHexNibble (hex[index + 1]);
         return this.sum (hi * 16, lo);
     }
 
-    fibeIsUnsignedIntegerString (value) {
+    fibeIsUnsignedIntegerString (value: any): boolean {
         if ((value === undefined) || (value === null)) {
             return false;
         }
-        const stringValue: string = this.numberToString (value);
-        if (stringValue === '') {
+        const stringValue = this.numberToString (value);
+        if ((stringValue === undefined) || (stringValue === '')) {
             return false;
         }
         const characters = this.stringToCharsArray (stringValue);
@@ -1893,18 +1935,18 @@ export default class fibe extends Exchange {
         return true;
     }
 
-    fibeValidateUnsignedIntegerParam (method, field, value) {
+    fibeValidateUnsignedIntegerParam (method: string, field: string, value: any): string {
         if ((value === undefined) || (value === null) || ((typeof value !== 'number') && (typeof value !== 'string'))) {
             throw new BadRequest (this.id + ' ' + method + '() ' + field + ' must be an unsigned integer');
         }
         const stringValue = this.numberToString (value);
-        if (!this.fibeIsUnsignedIntegerString (stringValue)) {
+        if ((stringValue === undefined) || !this.fibeIsUnsignedIntegerString (stringValue)) {
             throw new BadRequest (this.id + ' ' + method + '() ' + field + ' must be an unsigned integer');
         }
         return stringValue;
     }
 
-    fibeValidateU8Param (method, field, value, min = 0) {
+    fibeValidateU8Param (method: string, field: string, value: any, min = 0): number {
         const stringValue = this.fibeValidateUnsignedIntegerParam (method, field, value);
         const numeric = parseInt (stringValue);
         if ((numeric < min) || (numeric > 255)) {
@@ -1913,7 +1955,7 @@ export default class fibe extends Exchange {
         return numeric;
     }
 
-    fibeValidateU32Param (method, field, value) {
+    fibeValidateU32Param (method: string, field: string, value: any): number {
         const stringValue = this.fibeValidateUnsignedIntegerParam (method, field, value);
         const numeric = parseInt (stringValue);
         if (numeric > 4294967295) {
@@ -1922,7 +1964,7 @@ export default class fibe extends Exchange {
         return numeric;
     }
 
-    fibeNormalizeMarginMode (method, marginMode) {
+    fibeNormalizeMarginMode (method: string, marginMode: any): string {
         const normalized = marginMode.toLowerCase ();
         if ((normalized !== 'cross') && (normalized !== 'isolated')) {
             throw new InvalidOrder (this.id + ' ' + method + '() marginMode must be cross or isolated');
@@ -1930,31 +1972,30 @@ export default class fibe extends Exchange {
         return normalized;
     }
 
-    solanaU8Hex (value) {
+    solanaU8Hex (value: any): string {
         const stringValue = this.numberToString (value);
-        if (!this.fibeIsUnsignedIntegerString (stringValue)) {
+        if ((stringValue === undefined) || !this.fibeIsUnsignedIntegerString (stringValue)) {
             throw new ExchangeError (this.id + ' invalid u8 value ' + stringValue);
         }
         const numeric = parseInt (stringValue);
         if (numeric > 255) {
             throw new ExchangeError (this.id + ' u8 overflow');
         }
-        const alphabet = this.solanaHexAlphabet ();
-        const hi = this.parseToInt (numeric / 16);
-        const lo = numeric - (hi * 16);
-        return alphabet[hi] + alphabet[lo];
+        const hex = this.intToBase16 (numeric);
+        return hex.padStart (2, '0');
     }
 
-    solanaU16leHex (value) {
-        const numeric = this.parseToInt (value);
+    solanaU16leHex (value: any): string {
+        const stringValue: any = this.numberToString (value);
+        const numeric = parseInt (stringValue);
         const lo = numeric % 256;
-        const hi = this.parseToInt (numeric / 256);
+        const hi = Math.floor (numeric / 256);
         return this.solanaU8Hex (lo) + this.solanaU8Hex (hi);
     }
 
-    solanaU32leHex (value) {
+    solanaU32leHex (value: any): string {
         const stringValue = this.numberToString (value);
-        if (!this.fibeIsUnsignedIntegerString (stringValue)) {
+        if ((stringValue === undefined) || !this.fibeIsUnsignedIntegerString (stringValue)) {
             throw new ExchangeError (this.id + ' invalid u32 value ' + stringValue);
         }
         let remaining = parseInt (stringValue);
@@ -1962,7 +2003,7 @@ export default class fibe extends Exchange {
         for (let i = 0; i < 4; i++) {
             const byteValue = remaining % 256;
             result += this.solanaU8Hex (byteValue);
-            remaining = this.parseToInt (remaining / 256);
+            remaining = Math.floor (remaining / 256);
         }
         if (remaining !== 0) {
             throw new ExchangeError (this.id + ' u32 overflow');
@@ -1970,7 +2011,7 @@ export default class fibe extends Exchange {
         return result;
     }
 
-    solanaBytesHex (values) {
+    solanaBytesHex (values: any[]): string {
         let result = '';
         for (let i = 0; i < values.length; i++) {
             result += this.solanaU8Hex (values[i]);
@@ -1978,11 +2019,15 @@ export default class fibe extends Exchange {
         return result;
     }
 
-    solanaStringHex (value) {
-        return this.remove0xPrefix (this.stringToBase16 (value));
+    solanaStringHex (value: any): string {
+        const result = this.remove0xPrefix (this.stringToBase16 (value));
+        if (result === undefined) {
+            throw new ExchangeError (this.id + ' could not encode string');
+        }
+        return result;
     }
 
-    solanaPubkeyHex (pubkey) {
+    solanaPubkeyHex (pubkey: any): string {
         const decoded = this.base58ToBinary (pubkey);
         const result = this.binaryToBase16 (decoded);
         if (result.length !== 64) {
@@ -1991,7 +2036,7 @@ export default class fibe extends Exchange {
         return result;
     }
 
-    fibeDecimalStringDivInteger (value, divisor, roundUp = false) {
+    fibeDecimalStringDivInteger (value: any, divisor: any, roundUp = false): any {
         const divisorString = this.numberToString (divisor);
         let quotient = Precise.stringDiv (value, divisorString, 0);
         if (roundUp && Precise.stringGt (Precise.stringMod (value, divisorString), '0')) {
@@ -2000,13 +2045,13 @@ export default class fibe extends Exchange {
         return quotient;
     }
 
-    fibeDecimalToUnits (value, decimals) {
+    fibeDecimalToUnits (value: any, decimals: any): any {
         return Precise.stringDiv (value.trim (), this.parsePrecision (this.numberToString (decimals)), 0);
     }
 
-    fibeNewOrderId () {
-        const randomHex = this.randomBytes (8);
-        let result = '0';
+    fibeNewOrderId (): any {
+        const randomHex = this.randomBytes (8).padStart (16, '0');
+        let result: any = '0';
         let i = 0;
         while (i < randomHex.length) {
             const byteValue = this.solanaHexByte (randomHex, i);
@@ -2016,19 +2061,20 @@ export default class fibe extends Exchange {
         return result;
     }
 
-    fibeNormalizeQuantity (quantity, lotSize) {
+    fibeNormalizeQuantity (quantity: any, lotSize: any): any {
         return Precise.stringSub (quantity, Precise.stringMod (quantity, lotSize));
     }
 
-    solanaU64leHex (value) {
+    solanaU64leHex (value: any): string {
         const stringValue = this.numberToString (value);
-        if (!this.fibeIsUnsignedIntegerString (stringValue)) {
+        if ((stringValue === undefined) || !this.fibeIsUnsignedIntegerString (stringValue)) {
             throw new ExchangeError (this.id + ' invalid u64 value ' + stringValue);
         }
-        let remaining = Precise.stringAdd (stringValue, '0');
+        let remaining: any = Precise.stringAdd (stringValue, '0');
         let result = '';
         for (let i = 0; i < 8; i++) {
-            result += this.solanaU8Hex (parseInt (Precise.stringMod (remaining, '256')));
+            const byteValue: any = Precise.stringMod (remaining, '256');
+            result += this.solanaU8Hex (parseInt (byteValue));
             remaining = Precise.stringDiv (remaining, '256', 0);
         }
         if (remaining !== '0') {
@@ -2048,65 +2094,66 @@ export default class fibe extends Exchange {
         return result;
     }
 
-    solanaOptionU8Hex (value) {
+    solanaOptionU8Hex (value: any): string {
         if (value === undefined) {
             return this.solanaU8Hex (0);
         }
         return this.solanaU8Hex (1) + this.solanaU8Hex (value);
     }
 
-    solanaOptionU16Hex (value) {
+    solanaOptionU16Hex (value: any): string {
         if (value === undefined) {
             return this.solanaU8Hex (0);
         }
         return this.solanaU8Hex (1) + this.solanaU16leHex (value);
     }
 
-    solanaOptionU64Hex (value) {
+    solanaOptionU64Hex (value: any): string {
         if (value === undefined) {
             return this.solanaU8Hex (0);
         }
         return this.solanaU8Hex (1) + this.solanaU64leHex (value);
     }
 
-    solanaShortVecHex (value) {
+    solanaShortVecHex (value: number): string {
         let result = '';
         let remaining = value;
         while (remaining >= 128) {
             const elem = (remaining % 128) + 128;
-            remaining = this.parseToInt (remaining / 128);
+            remaining = Math.floor (remaining / 128);
             result += this.solanaU8Hex (elem);
         }
         return result + this.solanaU8Hex (remaining);
     }
 
-    fibeSideIndex (side) {
+    fibeSideIndex (side: any): number {
         if (side === 'B') {
             return 0;
         }
         return 1;
     }
 
-    fibeTimeInForceIndex (timeInForce) {
+    fibeTimeInForceIndex (timeInForce: any): any {
         const values = {
             'GTC': 0,
             'IOC': 1,
             'ALO': 2,
             'FOK': 3,
+            'FrontendMarket': 4,
         };
         return this.safeInteger (values, timeInForce);
     }
 
-    fibeGetTickArrayStartTick (priceInTicks) {
+    fibeGetTickArrayStartTick (priceInTicks: any): any {
         const numeric = parseInt (priceInTicks);
         const tickSizeInArray = this.fibeTickSizeInArray ();
         return this.numberToString (numeric - (numeric % tickSizeInArray));
     }
 
-    fibePriceToTicks (price, quoteDecimals, tickSizeInQuoteBaseUnits, side = undefined, slippage = undefined) {
-        let adjustedPrice = this.numberToString (price);
+    fibePriceToTicks (price: any, quoteDecimals: any, tickSizeInQuoteBaseUnits: any, side: any = undefined, slippage: any = undefined): any {
+        let adjustedPrice: any = this.numberToString (price);
         if (slippage !== undefined) {
-            let factor = Precise.stringSub ('1', this.numberToString (slippage));
+            let factor: any = Precise.stringSub ('1', this.numberToString (slippage));
             if (side === 'B') {
                 factor = Precise.stringAdd ('1', this.numberToString (slippage));
             }
@@ -2120,12 +2167,26 @@ export default class fibe extends Exchange {
         return this.fibeDecimalStringDivInteger (scaled, tickSizeInQuoteBaseUnits, side !== 'B');
     }
 
-    fibeTicksToPrice (priceInTicks, quoteDecimals, tickSizeInQuoteBaseUnits) {
+    fibeTicksToPrice (priceInTicks: any, quoteDecimals: any, tickSizeInQuoteBaseUnits: any): any {
         const rawPrice = Precise.stringMul (this.numberToString (priceInTicks), this.numberToString (tickSizeInQuoteBaseUnits));
         return Precise.stringMul (rawPrice, this.parsePrecision (this.numberToString (quoteDecimals)));
     }
 
-    solanaIsHexString (value) {
+    fibeSpotInputAmount (market: Dict, sizeInBase: any, priceInTicks: any, side: any): any {
+        if (side !== 'B') {
+            return sizeInBase;
+        }
+        const price = Precise.stringMul (this.numberToString (priceInTicks), this.safeString (market, 'tickSizeInQuoteBaseUnits'));
+        const quoteAmount = Precise.stringMul (this.numberToString (sizeInBase), price);
+        let scale = '1';
+        const baseDecimals: any = this.safeInteger (market, 'baseDecimals');
+        for (let i = 0; i < baseDecimals; i++) {
+            scale += '0';
+        }
+        return this.fibeDecimalStringDivInteger (quoteAmount, scale, true);
+    }
+
+    solanaIsHexString (value: string): boolean {
         if (value === '') {
             return false;
         }
@@ -2140,7 +2201,7 @@ export default class fibe extends Exchange {
         return true;
     }
 
-    solanaPublicKeyFromSecretKeyHex (secretKeyHex) {
+    solanaPublicKeyFromSecretKeyHex (secretKeyHex: string): string {
         if (secretKeyHex.length !== 128) {
             throw new ExchangeError (this.id + ' invalid Solana secret key length ' + this.numberToString (secretKeyHex.length / 2));
         }
@@ -2152,17 +2213,17 @@ export default class fibe extends Exchange {
         return this.binaryToBase58 (publicKey);
     }
 
-    solanaParsePrivateKeyHex (privateKey, user = undefined) {
+    solanaParsePrivateKeyHex (privateKey: any, user?: string): string {
         if (privateKey === undefined) {
             throw new ArgumentsRequired (this.id + ' requires a 64-byte Solana secret key');
         }
-        privateKey = privateKey.trim ();
-        if (privateKey === '') {
+        const privateKeyString = privateKey.trim ();
+        if (privateKeyString === '') {
             throw new ArgumentsRequired (this.id + ' requires a 64-byte Solana secret key');
         }
         let rawHex = undefined;
-        if (privateKey.indexOf ('[') === 0) {
-            const raw = this.parseJson (privateKey);
+        if (privateKeyString.indexOf ('[') === 0) {
+            const raw = this.parseJson (privateKeyString);
             if (!Array.isArray (raw)) {
                 throw new ExchangeError (this.id + ' Solana secret key JSON must be an array of bytes');
             }
@@ -2171,6 +2232,9 @@ export default class fibe extends Exchange {
                     throw new ExchangeError (this.id + ' invalid Solana private key byte at index ' + this.numberToString (i));
                 }
                 const byteValueString = this.numberToString (raw[i]);
+                if (byteValueString === undefined) {
+                    throw new ExchangeError (this.id + ' invalid Solana private key byte at index ' + this.numberToString (i));
+                }
                 const byteValue = parseInt (byteValueString);
                 if ((byteValue < 0) || (byteValue > 255)) {
                     throw new ExchangeError (this.id + ' invalid Solana private key byte at index ' + this.numberToString (i));
@@ -2178,14 +2242,14 @@ export default class fibe extends Exchange {
             }
             rawHex = this.solanaBytesHex (raw);
         } else {
-            let candidate = privateKey;
-            if (privateKey.indexOf ('0x') === 0) {
-                candidate = privateKey.slice (2);
+            let candidate = privateKeyString;
+            if (privateKeyString.indexOf ('0x') === 0) {
+                candidate = privateKeyString.slice (2);
             }
             if (this.solanaIsHexString (candidate)) {
                 rawHex = candidate.toLowerCase ();
             } else {
-                rawHex = this.binaryToBase16 (this.base58ToBinary (privateKey));
+                rawHex = this.binaryToBase16 (this.base58ToBinary (privateKeyString));
             }
         }
         if (rawHex.length !== 128) {
@@ -2193,21 +2257,21 @@ export default class fibe extends Exchange {
         }
         const publicKey = this.solanaPublicKeyFromSecretKeyHex (rawHex);
         if (user !== undefined) {
-            if (publicKey !== user) {
+            if (!this.inArray (publicKey, [ user ])) {
                 throw new AuthenticationError (this.id + ' credential does not match address ' + user);
             }
         }
         return rawHex.slice (0, 64);
     }
 
-    solanaIsOnCurveHex (candidateHex) {
+    solanaIsOnCurveHex (candidateHex: string): boolean {
         if (candidateHex.length !== 64) {
             return false;
         }
         return this.eddsaPointIsValid (this.base16ToBinary (candidateHex), ed25519);
     }
 
-    solanaFindProgramAddress (seeds, programId) {
+    solanaFindProgramAddress (seeds: string[], programId: any): string {
         const programHex = this.solanaPubkeyHex (programId);
         const markerHex = this.solanaStringHex ('ProgramDerivedAddress');
         let seedHex = '';
@@ -2227,89 +2291,144 @@ export default class fibe extends Exchange {
         throw new ExchangeError (this.id + ' unable to find Solana program address');
     }
 
-    fibePda (seeds, programId = undefined) {
+    fibePda (seeds: string[], programId: any = undefined): string {
         const program = (programId === undefined) ? this.fibeProgramId () : programId;
         return this.solanaFindProgramAddress (seeds, program);
     }
 
-    fibeGetUserStatePda (user) {
-        return this.fibePda ([ this.solanaStringHex ('user_state'), this.solanaPubkeyHex (user) ]);
+    fibeGetUserStatePda (user: any): string {
+        return this.fibePda ([ this.solanaStringHex ('user'), this.solanaPubkeyHex (user) ]);
     }
 
-    fibeGetDexConfigPda () {
+    fibeGetDexConfigPda (): string {
         return this.fibePda ([ this.solanaStringHex ('dex_config') ]);
     }
 
-    fibeGetAccountLabelHex (owner, subAccountIndex) {
+    fibeGetAccountLabelHex (owner: any, subAccountIndex: any): string {
         const ownerHex = this.solanaPubkeyHex (owner);
         return this.solanaU8Hex (subAccountIndex) + ownerHex.slice (2);
     }
 
-    fibeGetAccountLabelPda (owner, subAccountIndex) {
-        return this.fibePda ([ this.solanaStringHex ('account_label'), this.solanaPubkeyHex (owner), this.fibeGetAccountLabelHex (owner, subAccountIndex) ]);
+    fibeGetDexAuthorityConfigPda (): string {
+        return this.fibePda ([ this.solanaStringHex ('dex_authority_config') ]);
     }
 
-    fibeGetSubAccountStatePda (owner, subAccountIndex) {
-        return this.fibePda ([ this.solanaStringHex ('sub_account_state'), this.solanaPubkeyHex (owner), this.solanaU8Hex (subAccountIndex) ]);
+    fibeGetSpotDexConfigPda (): string {
+        return this.fibePda ([ this.solanaStringHex ('spot_dex_config') ]);
     }
 
-    async fibeGetOrNextAccountId (rpcUrl, owner, subAccountIndex, commitment = 'confirmed', allowNext = true) {
-        const subAccountState = this.fibeGetSubAccountStatePda (owner, subAccountIndex);
-        const subAccountInfo = await this.solanaGetAccountInfo (rpcUrl, subAccountState, commitment);
-        if (subAccountInfo !== undefined) {
-            const subAccountHex = this.fibeAssertAccountDiscriminator (subAccountInfo['data'], 10, 'sub-account state');
-            return this.solanaReadU64FromHex (subAccountHex, 40);
+    fibeGetPerpDexConfigPda (): string {
+        return this.fibePda ([ this.solanaStringHex ('perp_dex_config') ]);
+    }
+
+    fibeEncodeReferralCodeHex (code: string): string {
+        const codeHex = this.solanaStringHex (code);
+        if ((codeHex.length === 0) || (codeHex.length > 64)) {
+            throw new ExchangeError (this.id + ' referral code must contain 1 to 32 bytes');
+        }
+        return codeHex.padEnd (64, '0');
+    }
+
+    fibeGetReferrerInfoPda (code: string): string {
+        return this.fibePda ([ this.solanaStringHex ('referrer_info'), this.fibeEncodeReferralCodeHex (code) ]);
+    }
+
+    fibeGetPerpFeeRewardClaimPda (referrerInfo: any, mi: any): string {
+        return this.fibePda ([ this.solanaStringHex ('perp_fee_reward_claim'), this.solanaPubkeyHex (referrerInfo), this.solanaU64leHex (mi) ]);
+    }
+
+    async fibeGetReferralAccounts (owner: any, market: Dict, tokenProgramQuote: any = undefined, rpcUrl: any = undefined, commitment: any = undefined): Promise<Dict> {
+        const response = await this.publicGetReferralState ({ 'owner': owner });
+        const referredBy = this.safeDict (response, 'referredBy');
+        if (referredBy === undefined) {
+            return {};
+        }
+        const code = this.safeString (referredBy, 'code');
+        const referrer = this.safeString (referredBy, 'referrer');
+        if ((code === undefined) || (referrer === undefined)) {
+            throw new ExchangeError (this.id + ' referral state is missing the referral code or referrer');
+        }
+        const referrerInfo = this.fibeGetReferrerInfoPda (code);
+        if (this.safeString (market, 'mt') === 'P') {
+            return {
+                'referrerInfo': referrerInfo,
+                'referralFeeAccount': this.fibeGetPerpFeeRewardClaimPda (referrerInfo, this.safeString (market, 'mi')),
+            };
+        }
+        const quoteMint = this.safeString (market, 'quoteMint');
+        const referralFeeAccount = this.solanaGetAssociatedTokenAddress (quoteMint, referrer, tokenProgramQuote);
+        const createFeeAccountIx = await this.solanaCreateAssociatedTokenAccountIfNeeded (rpcUrl, owner, referrer, quoteMint, tokenProgramQuote, commitment);
+        return {
+            'referrerInfo': referrerInfo,
+            'referralFeeAccount': referralFeeAccount,
+            'createFeeAccountIx': createFeeAccountIx,
+        };
+    }
+
+    async fibeGetOrNextAccountId (owner: any, subAccountIndex: any, allowNext = true): Promise<Dict> {
+        const response = await this.publicGetAccountId ({
+            'owner': owner,
+            'subAccountIndex': subAccountIndex,
+        });
+        let accountId = this.safeString (response, 'accountId');
+        let createSubAccount = false;
+        if (accountId !== undefined) {
+            return { 'accountId': accountId, 'createSubAccount': createSubAccount };
         }
         if (!allowNext) {
             throw new ExchangeError (this.id + ' account is not initialized for subAccountIndex ' + this.numberToString (subAccountIndex));
         }
-        const dexConfig = await this.solanaGetAccountData (rpcUrl, this.fibeGetDexConfigPda (), commitment);
-        const dexConfigHex = this.fibeAssertAccountDiscriminator (dexConfig, 1, 'DEX config');
-        return this.solanaReadU64FromHex (dexConfigHex, 8);
+        const nextAccount = await this.publicGetNextAccountId ({});
+        accountId = this.safeString (nextAccount, 'accountId');
+        if (accountId === undefined) {
+            throw new ExchangeError (this.id + ' could not resolve the next Fibe account id');
+        }
+        createSubAccount = true;
+        return { 'accountId': accountId, 'createSubAccount': createSubAccount };
     }
 
-    fibeGetUserMarginAccountPda (accountId, quoteTokenIndex) {
-        return this.fibePda ([ this.solanaStringHex ('user_margin_account'), this.solanaU64leHex (accountId), this.solanaU16leHex (quoteTokenIndex) ]);
+    fibeGetUserMarginAccountPda (owner: any, subAccountIndex: any, quoteTokenIndex: any): string {
+        return this.fibePda ([ this.solanaStringHex ('user_margin_account'), this.solanaPubkeyHex (owner), this.solanaU8Hex (subAccountIndex), this.solanaU16leHex (quoteTokenIndex) ]);
     }
 
-    fibeGetOpenOrdersPerMarketPda (mt, accountId, mi) {
+    fibeGetOrderSlotsPda (mt: any, accountId: any, mi: any): string {
         const marketSeed = (mt === 'S') ? 'spot' : 'perp';
-        return this.fibePda ([ this.solanaStringHex (marketSeed), this.solanaStringHex ('open_orders_per_market'), this.solanaU64leHex (accountId), this.solanaU64leHex (mi) ]);
+        return this.fibePda ([ this.solanaStringHex (marketSeed), this.solanaStringHex ('order_slots'), this.solanaU64leHex (mi), this.solanaU64leHex (accountId) ]);
     }
 
-    fibeGetSpotMarketVaultPda (mi, tokenMint) {
+    fibeGetSpotMarketVaultPda (mi: any, tokenMint: any): string {
         return this.fibePda ([ this.solanaStringHex ('spot_market_vault'), this.solanaU64leHex (mi), this.solanaPubkeyHex (tokenMint) ]);
     }
 
-    fibeGetHfmmRegistryPda (mt, mi) {
+    fibeGetHfmmRegistryPda (mt: any, mi: any): string {
         const marketSeed = (mt === 'S') ? 'spot' : 'perp';
         return this.fibePda ([ this.solanaStringHex (marketSeed), this.solanaStringHex ('hfmm_market_registry'), this.solanaU64leHex (mi) ]);
     }
 
-    fibeGetPerpControlParamsPda (quoteTokenIndex) {
+    fibeGetPerpControlParamsPda (quoteTokenIndex: any): string {
         return this.fibePda ([ this.solanaStringHex ('perp_control_params'), this.solanaU16leHex (quoteTokenIndex) ]);
     }
 
-    fibeGetHfmmMarginAccountsPda (quoteTokenIndex) {
+    fibeGetMarginTableRegistryPda (quoteTokenIndex: any): string {
+        return this.fibePda ([ this.solanaStringHex ('margin_table'), this.solanaU16leHex (quoteTokenIndex) ]);
+    }
+
+    fibeGetHfmmMarginAccountsPda (quoteTokenIndex: any): string {
         return this.fibePda ([ this.solanaStringHex ('hfmm_margin_accounts'), this.solanaU16leHex (quoteTokenIndex) ]);
     }
 
-    fibeGetTickArrayPda (mt, mi, priceInTicks) {
+    fibeGetTickArrayPda (mt: any, mi: any, priceInTicks: any): string {
         const marketSeed = (mt === 'S') ? 'spot' : 'perp';
         const arrayStartTick = this.fibeGetTickArrayStartTick (priceInTicks);
-        return this.fibePda ([ this.solanaStringHex (marketSeed), this.solanaStringHex ('tick_array'), this.solanaU64leHex (this.fibeTickSizeInArray ()), this.solanaU64leHex (mi), this.solanaU64leHex (arrayStartTick) ]);
+        return this.fibePda ([ this.solanaStringHex (marketSeed), this.solanaStringHex ('tick_array'), this.solanaU64leHex (this.fibeTickSizeInArray ()), this.solanaU64leHex (mi), this.solanaU32leHex (arrayStartTick) ]);
     }
 
-    fibeMaxTick () {
+    fibeMaxTick (): number {
         return 2457600;
     }
 
-    fibeTickSizeInArray () {
+    fibeTickSizeInArray (): number {
         return 150;
-    }
-
-    fibeMarketTickArrayBitmapOffset () {
-        return 288; // 8-byte discriminator + 280-byte market prefix
     }
 
     solanaReadU64FromHex (hex, offset) {
@@ -2317,330 +2436,178 @@ export default class fibe extends Exchange {
         return this.solanaLeHexToDecimalString (hex.slice (start, start + 16));
     }
 
-    solanaReadU32FromHex (hex, offset) {
-        const start = offset * 2;
-        return this.solanaLeHexToDecimalString (hex.slice (start, start + 8));
-    }
-
-    solanaReadU8FromHex (hex, offset): Int {
-        return this.solanaHexByte (hex, offset * 2);
-    }
-
-    fibeAssertAccountDiscriminator (data, expected, name) {
-        const hex = this.binaryToBase16 (data);
-        const actual = this.solanaReadU8FromHex (hex, 0);
-        if (actual !== expected) {
-            throw new ExchangeError (this.id + ' unexpected ' + name + ' discriminator ' + this.numberToString (actual));
-        }
-        return hex;
-    }
-
-    fibeDecodeTickArrayBitmap (mt, marketData) {
-        const discriminator = (mt === 'S') ? 33 : 66;
-        const hex = this.fibeAssertAccountDiscriminator (marketData, discriminator, 'market');
-        const bitmapOffset = this.fibeMarketTickArrayBitmapOffset ();
-        return {
-            'askTickLowerBound': this.solanaReadU64FromHex (hex, bitmapOffset + 2048),
-            'bidTickUpperBound': this.solanaReadU64FromHex (hex, bitmapOffset + 2056),
-        };
-    }
-
-    fibeTickArrayStride (mt) {
-        if (mt === 'S') {
-            return 48;
-        }
-        return 64;
-    }
-
-    fibeTickArraySideBit (hex, tickIndex) {
-        const bitmapByteIndex = Math.floor (tickIndex / 8);
-        const bitIndex = tickIndex % 8;
-        const bitValue = Math.pow (2, bitIndex);
-        const bidByte = this.solanaReadU8FromHex (hex, 24 + bitmapByteIndex);
-        if ((Math.floor (bidByte / bitValue) % 2) === 1) {
-            return 1;
-        }
-        const askByte = this.solanaReadU8FromHex (hex, 48 + bitmapByteIndex);
-        if ((Math.floor (askByte / bitValue) % 2) === 1) {
-            return -1;
-        }
-        return 0;
-    }
-
-    fibeDecodeTickArrayState (mt, data) {
-        const discriminator = (mt === 'S') ? 34 : 67;
-        const hex = this.fibeAssertAccountDiscriminator (data, discriminator, 'tick array');
-        const startTick = parseInt (this.solanaReadU64FromHex (hex, 80));
-        const tickStride = this.fibeTickArrayStride (mt);
-        const ticks = [];
-        for (let i = 0; i < this.fibeTickSizeInArray (); i++) {
-            const offset = this.sum (88, i * tickStride);
-            const filled = this.solanaReadU64FromHex (hex, offset);
-            const total0 = this.solanaReadU64FromHex (hex, offset + 8);
-            const total1 = this.solanaReadU64FromHex (hex, offset + 16);
-            const total = Precise.stringAdd (total0, total1);
-            let unfilled = '0';
-            if (Precise.stringGe (total, filled)) {
-                unfilled = Precise.stringSub (total, filled);
-            }
-            ticks.push ({
-                'unfilledLots': unfilled,
-                'sideBit': this.fibeTickArraySideBit (hex, i),
-            });
-        }
-        return {
-            'startTick': startTick,
-            'ticks': ticks,
-        };
-    }
-
-    async solanaGetMultipleAccountData (rpcUrl, pubkeys, commitment = 'confirmed') {
-        const result = [];
-        let offset = 0;
-        while (offset < pubkeys.length) {
-            const chunk = pubkeys.slice (offset, offset + 100);
-            const response = await this.solanaRpc (rpcUrl, 'getMultipleAccounts', [
-                chunk,
-                { 'encoding': 'base64', 'commitment': commitment },
-            ]);
-            const values = this.safeList (response, 'value', []);
-            for (let i = 0; i < values.length; i++) {
-                const value = this.safeValue (values, i);
-                if (value === undefined) {
-                    result.push (undefined);
-                } else {
-                    const data = this.safeList (value, 'data', []);
-                    if (data.length === 0) {
-                        throw new ExchangeError (this.id + ' Solana account response is missing base64 data for ' + chunk[i]);
-                    }
-                    result.push (this.base64ToBinary (data[0]));
-                }
-            }
-            offset = offset + 100;
-        }
-        return result;
-    }
-
-    async fibeGetTickArrayStates (rpcUrl, market, pubkeys, commitment = 'confirmed') {
-        const states = [];
-        const accounts = await this.solanaGetMultipleAccountData (rpcUrl, pubkeys, commitment);
-        const mt = this.safeString (market, 'mt');
-        for (let i = 0; i < accounts.length; i++) {
-            const data = accounts[i];
-            if (data !== undefined) {
-                states.push (this.fibeDecodeTickArrayState (mt, data));
-            }
-        }
-        return states;
-    }
-
-    fibeFillTickLots (tick, lots, side) {
-        const sideBit = this.safeInteger (tick, 'sideBit');
-        if (((side === 'B') && (sideBit !== -1)) || ((side === 'A') && (sideBit !== 1))) {
-            return lots;
-        }
-        const unfilledLots = this.safeString (tick, 'unfilledLots', '0');
-        if (Precise.stringGe (unfilledLots, lots)) {
-            return '0';
-        }
-        return Precise.stringSub (lots, unfilledLots);
-    }
-
-    fibeFillTickArrayBid (state, priceInTicks, lots) {
-        const startTick = this.safeInteger (state, 'startTick');
-        const ticks = this.safeList (state, 'ticks', []);
-        let remainingLots = lots;
-        for (let i = 0; i < ticks.length; i++) {
-            const tickIndex = this.sum (startTick, i);
-            if (tickIndex > priceInTicks) {
-                break;
-            }
-            remainingLots = this.fibeFillTickLots (ticks[i], remainingLots, 'B');
-            if (remainingLots === '0') {
-                break;
-            }
-        }
-        return remainingLots;
-    }
-
-    fibeFillTickArrayAsk (state, priceInTicks, lots) {
-        const startTick = this.safeInteger (state, 'startTick');
-        const ticks = this.safeList (state, 'ticks', []);
-        let remainingLots = lots;
-        for (let revIndex = 0; revIndex < ticks.length; revIndex++) {
-            const index = ticks.length - revIndex - 1;
-            const tickIndex = this.sum (startTick, this.fibeTickSizeInArray ()) - revIndex - 1;
-            if (tickIndex < priceInTicks) {
-                break;
-            }
-            remainingLots = this.fibeFillTickLots (ticks[index], remainingLots, 'A');
-            if (remainingLots === '0') {
-                break;
-            }
-        }
-        return remainingLots;
-    }
-
-    fibeFindTickArrayIndexesForOrder (states, priceInTicks, baseLots, side) {
-        states = this.sortBy (states, 'startTick');
-        const startTick = parseInt (this.fibeGetTickArrayStartTick (this.numberToString (priceInTicks)));
-        const indexes = [];
-        let remainingLots = baseLots;
-        if (side === 'B') {
-            for (let i = 0; i < states.length; i++) {
-                const state = states[i];
-                const stateStartTick = this.safeInteger (state, 'startTick');
-                if (stateStartTick > startTick) {
-                    break;
-                }
-                indexes.push (stateStartTick);
-                remainingLots = this.fibeFillTickArrayBid (state, priceInTicks, remainingLots);
-                if (remainingLots === '0') {
-                    break;
-                }
-            }
-        } else {
-            let i = states.length - 1;
-            while (i >= 0) {
-                const state = states[i];
-                const stateStartTick = this.safeInteger (state, 'startTick');
-                if (stateStartTick < startTick) {
-                    break;
-                }
-                indexes.push (stateStartTick);
-                remainingLots = this.fibeFillTickArrayAsk (state, priceInTicks, remainingLots);
-                if (remainingLots === '0') {
-                    break;
-                }
-                i = i - 1;
-            }
-            indexes.reverse ();
+    fibeAddTickArrayIndex (indexes: number[], index: number): number[] {
+        if (!this.inArray (index, indexes)) {
+            indexes.push (index);
         }
         return indexes;
     }
 
-    fibeGetAllTickArrayIndexesForBid (priceInTicks, tickArrayIndexes) {
-        let allIndexes = [];
-        const currentIndex = parseInt (this.fibeGetTickArrayStartTick (this.numberToString (priceInTicks)));
-        const toIndex = (tickArrayIndexes.length > 0) ? tickArrayIndexes[0] : currentIndex;
-        const fromIndex = Math.max (toIndex - (this.fibeTickSizeInArray () * 2), 0);
-        const tickSize = this.fibeTickSizeInArray ();
-        let beforeCount = 0;
-        if (fromIndex < toIndex) {
-            beforeCount = Math.floor ((toIndex - fromIndex) / tickSize);
+    fibeSelectMatchingTickArrayIndexes (response: Dict, priceInTicks: any, baseLots: any, side: any, coverLimit: boolean): number[] {
+        const arrays = this.safeList (response, (side === 'B') ? 'asks' : 'bids', []);
+        const current = parseInt (this.fibeGetTickArrayStartTick (priceInTicks));
+        let remaining: any = baseLots;
+        const selectedIndexes: number[] = [];
+        for (let i = 0; i < arrays.length; i++) {
+            const array = arrays[i];
+            const startTick = this.safeInteger (array, 'start_tick');
+            if (startTick === undefined) {
+                continue;
+            }
+            const size = this.safeString (array, 'size', '0');
+            if (!Precise.stringGt (size, '0')) {
+                continue;
+            }
+            if (((side === 'B') && (startTick > current)) || ((side === 'A') && (startTick < current))) {
+                break;
+            }
+            selectedIndexes.push (startTick);
+            remaining = Precise.stringGe (size, remaining) ? '0' : Precise.stringSub (remaining, size);
+            if (!coverLimit && (remaining === '0')) {
+                break;
+            }
         }
-        for (let i = 0; i < beforeCount; i++) {
-            const index = this.sum (fromIndex, i * tickSize);
-            allIndexes.push (index);
+        let selectedLength = selectedIndexes.length;
+        if ((selectedLength === 0) || (coverLimit && (selectedIndexes[selectedLength - 1] !== current))) {
+            selectedIndexes.push (current);
+            selectedLength = selectedIndexes.length;
         }
-        allIndexes = this.arrayConcat (allIndexes, tickArrayIndexes);
-        let lastTickIndex = currentIndex;
-        if (tickArrayIndexes.length > 0) {
-            const lastIndex = tickArrayIndexes.length - 1;
-            lastTickIndex = tickArrayIndexes[lastIndex];
+        if (selectedLength > 16) {
+            throw new InvalidOrder (this.id + ' createOrder() requires more than 16 matching tick arrays');
         }
-        const fromIndexAfter = this.sum (lastTickIndex, this.fibeTickSizeInArray ());
-        const toIndexAfter = Math.min (this.sum (fromIndexAfter, this.fibeTickSizeInArray () * 2), currentIndex);
-        let afterCount = 0;
-        if (fromIndexAfter < toIndexAfter) {
-            afterCount = Math.floor ((toIndexAfter - fromIndexAfter) / tickSize);
+        const indexes: number[] = [];
+        if (side === 'A') {
+            for (let i = 0; i < selectedLength; i++) {
+                indexes.push (selectedIndexes[selectedLength - i - 1]);
+            }
+        } else {
+            for (let i = 0; i < selectedLength; i++) {
+                indexes.push (selectedIndexes[i]);
+            }
         }
-        for (let i = 0; i < afterCount; i++) {
-            const index = this.sum (fromIndexAfter, i * tickSize);
-            allIndexes.push (index);
+        let indexesLength = indexes.length;
+        const first = parseInt (this.numberToString (indexes[0]));
+        const lastIndex = indexesLength - 1;
+        const last = parseInt (this.numberToString (indexes[lastIndex]));
+        const maxStart = this.fibeMaxTick () - this.fibeTickSizeInArray ();
+        const prependedIndexes: number[] = [];
+        let prependedLength = 0;
+        let offset = 1;
+        while (offset <= 2) {
+            if (this.sum (indexesLength, prependedLength) >= 16) {
+                break;
+            }
+            const lower = first - (offset * this.fibeTickSizeInArray ());
+            const upper = this.sum (last, offset * this.fibeTickSizeInArray ());
+            const candidates = (side === 'B') ? [ lower, upper ] : [ upper, lower ];
+            for (let i = 0; i < candidates.length; i++) {
+                if (this.sum (indexesLength, prependedLength) >= 16) {
+                    break;
+                }
+                const candidate = candidates[i];
+                if ((candidate >= 0) && (candidate <= maxStart)) {
+                    if (candidate < first) {
+                        prependedIndexes.push (candidate);
+                        prependedLength += 1;
+                    } else {
+                        indexes.push (candidate);
+                        indexesLength += 1;
+                    }
+                }
+            }
+            offset += 1;
         }
-        allIndexes.push (currentIndex);
-        return allIndexes;
+        const result: number[] = [];
+        for (let i = 0; i < prependedLength; i++) {
+            result.push (prependedIndexes[prependedLength - i - 1]);
+        }
+        for (let i = 0; i < indexesLength; i++) {
+            result.push (indexes[i]);
+        }
+        return result;
     }
 
-    fibeGetAllTickArrayIndexesForAsk (priceInTicks, tickArrayIndexes) {
-        const currentIndex = parseInt (this.fibeGetTickArrayStartTick (this.numberToString (priceInTicks)));
-        let allIndexes = [ currentIndex ];
-        const toIndex = (tickArrayIndexes.length > 0) ? tickArrayIndexes[0] : currentIndex;
-        const fromIndex = Math.max (Math.max (toIndex - (this.fibeTickSizeInArray () * 2), 0), this.sum (currentIndex, this.fibeTickSizeInArray ()));
-        const tickSize = this.fibeTickSizeInArray ();
-        let beforeCount = 0;
-        if (fromIndex < toIndex) {
-            beforeCount = Math.floor ((toIndex - fromIndex) / tickSize);
+    fibeSettlementTickArrayIndexes (orderSlots: Dict[]): number[] {
+        let indexes: number[] = [];
+        for (let i = 0; i < orderSlots.length; i++) {
+            if (this.safeBool (orderSlots[i], 'isTriggerOrder', false)) {
+                continue;
+            }
+            const priceInTicks = this.safeInteger (orderSlots[i], 'priceInTicks');
+            if ((priceInTicks !== undefined) && (priceInTicks !== 0)) {
+                indexes = this.fibeAddTickArrayIndex (indexes, parseInt (this.fibeGetTickArrayStartTick (this.numberToString (priceInTicks))));
+            }
         }
-        for (let i = 0; i < beforeCount; i++) {
-            const index = this.sum (fromIndex, i * tickSize);
-            allIndexes.push (index);
-        }
-        allIndexes = this.arrayConcat (allIndexes, tickArrayIndexes);
-        let lastTickIndex = currentIndex;
-        if (tickArrayIndexes.length > 0) {
-            const lastIndex = tickArrayIndexes.length - 1;
-            lastTickIndex = tickArrayIndexes[lastIndex];
-        }
-        const fromIndexAfter = this.sum (lastTickIndex, this.fibeTickSizeInArray ());
-        const toIndexAfter = Math.min (this.sum (fromIndexAfter, this.fibeTickSizeInArray () * 2), this.fibeMaxTick ());
-        let afterCount = 0;
-        if (fromIndexAfter < toIndexAfter) {
-            afterCount = Math.floor ((toIndexAfter - fromIndexAfter) / tickSize);
-        }
-        for (let i = 0; i < afterCount; i++) {
-            const index = this.sum (fromIndexAfter, i * tickSize);
-            allIndexes.push (index);
-        }
-        return allIndexes;
+        return indexes;
     }
 
-    async fibeGetTickArraysForOrder (rpcUrl, market, priceInTicks, sizeInBase, side, commitment) {
-        const priceInTicksNumber = parseInt (priceInTicks);
-        const mt = this.safeString (market, 'mt');
-        const mi = this.safeString (market, 'mi');
-        const marketData = await this.solanaGetAccountData (rpcUrl, this.safeString (market, 'marketPubkey'), commitment);
-        const bitmap = this.fibeDecodeTickArrayBitmap (mt, marketData);
-        const baseLots = this.fibeDecimalStringDivInteger (sizeInBase, this.safeString (market, 'lotSizeInBaseBaseUnits'), true);
-        const candidates = [];
-        if (side === 'B') {
-            const lowestAskStart = parseInt (this.safeString (bitmap, 'askTickLowerBound'));
-            const endIndex = parseInt (this.fibeGetTickArrayStartTick (priceInTicks));
-            const buyTickSize = this.fibeTickSizeInArray ();
-            let buyCandidateCount = 0;
-            if (lowestAskStart < endIndex) {
-                buyCandidateCount = Math.floor ((endIndex - lowestAskStart) / buyTickSize);
-            }
-            for (let i = 0; i < buyCandidateCount; i++) {
-                const index = this.sum (lowestAskStart, i * buyTickSize);
-                candidates.push (this.fibeGetTickArrayPda (mt, mi, this.numberToString (index)));
-            }
-            const buyStates = await this.fibeGetTickArrayStates (rpcUrl, market, candidates, commitment);
-            const buyIndexes = this.fibeFindTickArrayIndexesForOrder (buyStates, priceInTicksNumber, baseLots, side);
-            const buyAllIndexes = this.fibeGetAllTickArrayIndexesForBid (priceInTicksNumber, buyIndexes);
-            const buyResult = [];
-            for (let i = 0; i < buyAllIndexes.length; i++) {
-                buyResult.push (this.fibeGetTickArrayPda (mt, mi, this.numberToString (buyAllIndexes[i])));
-            }
-            return buyResult;
+    fibeTickArrayPdas (mt: string, mi: string, indexes: number[]): string[] {
+        const result: string[] = [];
+        for (let i = 0; i < indexes.length; i++) {
+            result.push (this.fibeGetTickArrayPda (mt, mi, this.numberToString (indexes[i])));
         }
-        const highestBidStart = parseInt (this.safeString (bitmap, 'bidTickUpperBound'));
-        const fromIndex = this.sum (parseInt (this.fibeGetTickArrayStartTick (priceInTicks)), this.fibeTickSizeInArray ());
-        const sellTickSize = this.fibeTickSizeInArray ();
-        let sellCandidateCount = 0;
-        if (fromIndex <= highestBidStart) {
-            sellCandidateCount = Math.floor ((highestBidStart - fromIndex) / sellTickSize) + 1;
-        }
-        for (let i = 0; i < sellCandidateCount; i++) {
-            const index = this.sum (fromIndex, i * sellTickSize);
-            candidates.push (this.fibeGetTickArrayPda (mt, mi, this.numberToString (index)));
-        }
-        const sellStates = await this.fibeGetTickArrayStates (rpcUrl, market, candidates, commitment);
-        const sellIndexes = this.fibeFindTickArrayIndexesForOrder (sellStates, priceInTicksNumber, baseLots, side);
-        const sellAllIndexes = this.fibeGetAllTickArrayIndexesForAsk (priceInTicksNumber, sellIndexes);
-        const sellResult = [];
-        for (let i = 0; i < sellAllIndexes.length; i++) {
-            sellResult.push (this.fibeGetTickArrayPda (mt, mi, this.numberToString (sellAllIndexes[i])));
-        }
-        return sellResult;
+        return result;
     }
 
-    solanaGetAssociatedTokenAddress (mint, owner, tokenProgram) {
+    async fibeGetCreateOrderTickArrays (market: Dict, owner: any, subAccountIndex: any, priceInTicks: any, sizeInBase: any, side: any, timeInForce: any): Promise<Dict> {
+        const mt = this.safeString (market, 'mt') as string;
+        const mi = this.safeString (market, 'mi') as string;
+        const tickArrayResponse = await this.publicGetTickArray ({ 'mi': mi, 'mt': mt });
+        const orderSlotsResponse = await this.publicGetOrderSlots ({
+            'owner': owner,
+            'mi': mi,
+            'mt': mt,
+            'subAccountIndex': subAccountIndex,
+        });
+        const coverLimit = (timeInForce === 'GTC') || (timeInForce === 'ALO');
+        const matchingIndexes = this.fibeSelectMatchingTickArrayIndexes (tickArrayResponse, priceInTicks, sizeInBase, side, coverLimit);
+        const matchingCount = matchingIndexes.length;
+        let indexes: number[] = [];
+        for (let i = 0; i < matchingIndexes.length; i++) {
+            indexes.push (matchingIndexes[i]);
+        }
+        const orderSlots = this.safeList (orderSlotsResponse, 'orderSlots', []);
+        const settlementIndexes = this.fibeSettlementTickArrayIndexes (orderSlots);
+        for (let i = 0; i < settlementIndexes.length; i++) {
+            indexes = this.fibeAddTickArrayIndex (indexes, settlementIndexes[i]);
+        }
+        return {
+            'tickArrays': this.fibeTickArrayPdas (mt, mi, indexes),
+            'matchingCount': matchingCount,
+        };
+    }
+
+    async fibeGetCancelOrderTickArrays (market: Dict, owner: any, subAccountIndex: any, orderId: any, clientOrderId: boolean): Promise<Dict> {
+        const mt = this.safeString (market, 'mt') as string;
+        const mi = this.safeString (market, 'mi') as string;
+        const response = await this.publicGetOrderSlots ({
+            'owner': owner,
+            'mi': mi,
+            'mt': mt,
+            'subAccountIndex': subAccountIndex,
+        });
+        const orderSlots = this.safeList (response, 'orderSlots', []);
+        const key = clientOrderId ? 'cloid' : 'oid';
+        let found = false;
+        for (let i = 0; i < orderSlots.length; i++) {
+            if (this.safeString (orderSlots[i], key) === orderId) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            throw new OrderNotFound (this.id + ' cancelOrder() could not find open order ' + orderId);
+        }
+        return {
+            'tickArrays': this.fibeTickArrayPdas (mt, mi, this.fibeSettlementTickArrayIndexes (orderSlots)),
+        };
+    }
+
+    solanaGetAssociatedTokenAddress (mint: any, owner: any, tokenProgram: any): string {
         return this.fibePda ([ this.solanaPubkeyHex (owner), this.solanaPubkeyHex (tokenProgram), this.solanaPubkeyHex (mint) ], this.solanaAssociatedTokenProgramId ());
     }
 
-    solanaAccount (pubkey, isWritable = false, isSigner = false) {
+    solanaAccount (pubkey: any, isWritable = false, isSigner = false): Dict {
         return {
             'pubkey': pubkey,
             'isWritable': isWritable,
@@ -2648,7 +2615,7 @@ export default class fibe extends Exchange {
         };
     }
 
-    solanaCreateAssociatedTokenAccountIx (payer, ata, owner, mint, tokenProgram) {
+    solanaCreateAssociatedTokenAccountIx (payer: any, ata: any, owner: any, mint: any, tokenProgram: any): Dict {
         return {
             'programId': this.solanaAssociatedTokenProgramId (),
             'accounts': [
@@ -2664,7 +2631,7 @@ export default class fibe extends Exchange {
         };
     }
 
-    async solanaCreateAssociatedTokenAccountIfNeeded (rpcUrl, payer, owner, mint, tokenProgram, commitment = 'confirmed') {
+    async solanaCreateAssociatedTokenAccountIfNeeded (rpcUrl: any, payer: any, owner: any, mint: any, tokenProgram: any, commitment = 'confirmed'): Promise<any> {
         const ata = this.solanaGetAssociatedTokenAddress (mint, owner, tokenProgram);
         const accountInfo = await this.solanaGetAccountInfo (rpcUrl, ata, commitment);
         if (accountInfo !== undefined) {
@@ -2673,7 +2640,7 @@ export default class fibe extends Exchange {
         return this.solanaCreateAssociatedTokenAccountIx (payer, ata, owner, mint, tokenProgram);
     }
 
-    solanaSystemTransferIx (source, destination, lamports) {
+    solanaSystemTransferIx (source: any, destination: any, lamports: any): Dict {
         return {
             'programId': this.solanaSystemProgramId (),
             'accounts': [
@@ -2684,7 +2651,7 @@ export default class fibe extends Exchange {
         };
     }
 
-    solanaSyncNativeIx (account, tokenProgram) {
+    solanaSyncNativeIx (account: any, tokenProgram: any): Dict {
         return {
             'programId': tokenProgram,
             'accounts': [ this.solanaAccount (account, true) ],
@@ -2692,7 +2659,7 @@ export default class fibe extends Exchange {
         };
     }
 
-    async solanaWrapNativeIfNeeded (rpcUrl, owner, tokenProgram, amount, commitment = 'confirmed') {
+    async solanaWrapNativeIfNeeded (rpcUrl: any, owner: any, tokenProgram: any, amount: any, commitment = 'confirmed'): Promise<Dict[]> {
         const ata = this.solanaGetAssociatedTokenAddress (this.solanaNativeMint (), owner, tokenProgram);
         const accountInfo = await this.solanaGetAccountInfo (rpcUrl, ata, commitment);
         const instructions = [];
@@ -2715,7 +2682,7 @@ export default class fibe extends Exchange {
         return instructions;
     }
 
-    solanaSetComputeUnitLimitIx (units) {
+    solanaSetComputeUnitLimitIx (units: any): Dict {
         return {
             'programId': this.solanaComputeBudgetProgramId (),
             'accounts': [],
@@ -2723,7 +2690,7 @@ export default class fibe extends Exchange {
         };
     }
 
-    solanaSetComputeUnitPriceIx (microLamports) {
+    solanaSetComputeUnitPriceIx (microLamports: any): Dict {
         return {
             'programId': this.solanaComputeBudgetProgramId (),
             'accounts': [],
@@ -2731,7 +2698,7 @@ export default class fibe extends Exchange {
         };
     }
 
-    solanaAddComputeBudgetIxs (instructions, params) {
+    solanaAddComputeBudgetIxs (instructions: Dict[], params: Dict): Dict[] {
         const computeUnitLimit = this.safeInteger (params, 'computeUnitLimit');
         const computeUnitPriceMicroLamports = this.safeString (params, 'computeUnitPriceMicroLamports');
         if ((computeUnitLimit === undefined) && (computeUnitPriceMicroLamports === undefined)) {
@@ -2747,23 +2714,54 @@ export default class fibe extends Exchange {
         return this.arrayConcat (result, instructions);
     }
 
-    fibeSpotPlaceOrderIx (input) {
-        let data = this.solanaBytesHex ([ 57, 0, 0, 0, 0, 0, 0, 0 ]);
-        data += this.solanaU64leHex (input['priceInTicks']);
-        data += this.solanaU64leHex (input['orderId']);
+    fibeOrderReferenceHex (orderId: string, clientOrderId: boolean): string {
+        let orderReferenceType = 1;
+        if (clientOrderId) {
+            orderReferenceType = 0;
+        }
+        return this.solanaU8Hex (orderReferenceType) + this.solanaU64leHex (orderId);
+    }
+
+    fibeCreateSubAccountIx (owner: any, subAccountIndex: any): Dict {
+        return {
+            'programId': this.fibeProgramId (),
+            'accounts': [
+                this.solanaAccount (this.fibeProgramId ()),
+                this.solanaAccount (this.solanaSystemProgramId ()),
+                this.solanaAccount (this.fibeGetDexAuthorityConfigPda ()),
+                this.solanaAccount (this.fibeGetDexConfigPda (), true),
+                this.solanaAccount (owner, true, true),
+                this.solanaAccount (owner, false, true),
+                this.solanaAccount (owner),
+                this.solanaAccount (this.fibeGetUserStatePda (owner), true),
+            ],
+            'data': this.solanaBytesHex ([ 32, 0, 0, 0, 0, 0, 0, 0 ]) + this.solanaU8Hex (subAccountIndex) + this.solanaU8Hex (0) + this.fibeGetAccountLabelHex (owner, subAccountIndex),
+        };
+    }
+
+    fibeSpotPlaceOrderIx (input: Dict): Dict {
+        let data = this.solanaBytesHex ([ 96, 0, 0, 0, 0, 0, 0, 0 ]);
+        data += this.solanaU8Hex (input['subAccountIndex']);
+        data += this.solanaU32leHex (input['priceInTicks']);
+        data += this.solanaOptionU64Hex (input['clientOrderId']);
         data += this.solanaU8Hex (this.fibeSideIndex (input['side']));
-        data += this.solanaOptionU64Hex (input['sizeInBase']);
-        data += this.solanaOptionU64Hex (undefined);
+        data += this.solanaU64leHex (input['sizeInBase']);
         data += this.solanaU8Hex (this.fibeTimeInForceIndex (input['timeInForce']));
         data += this.solanaOptionU16Hex (undefined);
+        data += this.solanaU8Hex (input['matchingCount']);
+        const referrerInfo = this.safeString (input, 'referrerInfo', this.fibeProgramId ());
+        const referralFeeAccount = this.safeString (input, 'referralFeeAccount');
+        const referralFeeAccountAddress = (referralFeeAccount === undefined) ? this.fibeProgramId () : referralFeeAccount;
         const accounts = [
+            this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (this.solanaSystemProgramId ()),
             this.solanaAccount (input['owner'], true, true),
             this.solanaAccount (this.fibeGetDexConfigPda ()),
-            this.solanaAccount (input['market'], true),
-            this.solanaAccount (input['ownerSubAccountState'], true),
+            this.solanaAccount (this.fibeGetSpotDexConfigPda ()),
+            this.solanaAccount (input['owner'], false, true),
             this.solanaAccount (input['ownerState'], true),
-            this.solanaAccount (input['openOrdersPerMarket'], true),
+            this.solanaAccount (input['market'], true),
+            this.solanaAccount (input['orderSlots'], true),
             this.solanaAccount (input['ownerBaseTokenAccount'], true),
             this.solanaAccount (input['ownerQuoteTokenAccount'], true),
             this.solanaAccount (input['tokenVaultBase'], true),
@@ -2772,14 +2770,14 @@ export default class fibe extends Exchange {
             this.solanaAccount (input['tokenMintQuote']),
             this.solanaAccount (input['tokenProgramBase']),
             this.solanaAccount (input['tokenProgramQuote']),
-            this.solanaAccount (this.fibeProgramId ()),
-            this.solanaAccount (this.fibeProgramId ()),
+            this.solanaAccount (referrerInfo),
+            this.solanaAccount (referralFeeAccountAddress, referralFeeAccount !== undefined),
             this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (input['hfmmRegistry'], true),
         ];
-        const tickArrays = this.safeList (input, 'tickArrays', [ input['tickArray'] ]);
+        const tickArrays = this.safeList (input, 'tickArrays', []);
         for (let i = 0; i < tickArrays.length; i++) {
             accounts.push (this.solanaAccount (tickArrays[i], true));
         }
@@ -2790,89 +2788,83 @@ export default class fibe extends Exchange {
         };
     }
 
-    fibeInitUserIx (owner, subAccountIndex) {
-        const accountLabel = this.fibeGetAccountLabelHex (owner, subAccountIndex);
-        return {
-            'programId': this.fibeProgramId (),
-            'accounts': [
-                this.solanaAccount (this.solanaSystemProgramId ()),
-                this.solanaAccount (this.fibeGetDexConfigPda (), true),
-                this.solanaAccount (owner, true, true),
-                this.solanaAccount (this.fibeGetUserStatePda (owner), true),
-                this.solanaAccount (this.fibeGetAccountLabelPda (owner, subAccountIndex), true),
-                this.solanaAccount (this.fibeGetSubAccountStatePda (owner, subAccountIndex), true),
-                this.solanaAccount (this.fibeProgramId ()),
-                this.solanaAccount (this.fibeProgramId ()),
-                this.solanaAccount (this.fibeProgramId ()),
-            ],
-            'data': this.solanaBytesHex ([ 16, 0, 0, 0, 0, 0, 0, 0 ]) + this.solanaU8Hex (subAccountIndex) + this.solanaU8Hex (0) + accountLabel,
-        };
-    }
-
-    async fibeInitUserIfNeeded (rpcUrl, owner, subAccountIndex, commitment = 'confirmed') {
-        const subAccountState = this.fibeGetSubAccountStatePda (owner, subAccountIndex);
-        const accountInfo = await this.solanaGetAccountInfo (rpcUrl, subAccountState, commitment);
-        if (accountInfo !== undefined) {
-            return undefined;
+    fibeSpotCloseRestingOrderIx (input: Dict): Dict {
+        let data = this.solanaBytesHex ([ 97, 0, 0, 0, 0, 0, 0, 0 ]);
+        data += this.solanaU8Hex (input['subAccountIndex']);
+        data += this.fibeOrderReferenceHex (input['orderId'], input['isClientOrderId']);
+        const accounts = [
+            this.solanaAccount (this.fibeProgramId ()),
+            this.solanaAccount (this.fibeGetDexConfigPda ()),
+            this.solanaAccount (this.fibeGetSpotDexConfigPda ()),
+            this.solanaAccount (input['owner'], false, true),
+            this.solanaAccount (input['ownerState'], true),
+            this.solanaAccount (input['market'], true),
+            this.solanaAccount (input['orderSlots'], true),
+            this.solanaAccount (input['ownerBaseTokenAccount'], true),
+            this.solanaAccount (input['ownerQuoteTokenAccount'], true),
+            this.solanaAccount (input['tokenVaultBase'], true),
+            this.solanaAccount (input['tokenVaultQuote'], true),
+            this.solanaAccount (input['tokenMintBase']),
+            this.solanaAccount (input['tokenMintQuote']),
+            this.solanaAccount (input['tokenProgramBase']),
+            this.solanaAccount (input['tokenProgramQuote']),
+        ];
+        const tickArrays = this.safeList (input, 'tickArrays', []);
+        for (let i = 0; i < tickArrays.length; i++) {
+            accounts.push (this.solanaAccount (tickArrays[i], true));
         }
-        return this.fibeInitUserIx (owner, subAccountIndex);
-    }
-
-    fibeSpotCloseRestingOrderIx (input) {
         return {
             'programId': this.fibeProgramId (),
-            'accounts': [
-                this.solanaAccount (input['owner'], true, true),
-                this.solanaAccount (this.fibeGetDexConfigPda ()),
-                this.solanaAccount (input['market'], true),
-                this.solanaAccount (input['ownerSubAccountState'], true),
-                this.solanaAccount (input['ownerState'], true),
-                this.solanaAccount (input['openOrdersPerMarket'], true),
-                this.solanaAccount (input['tickArray'], true),
-                this.solanaAccount (input['ownerBaseTokenAccount'], true),
-                this.solanaAccount (input['ownerQuoteTokenAccount'], true),
-                this.solanaAccount (input['tokenVaultBase'], true),
-                this.solanaAccount (input['tokenVaultQuote'], true),
-                this.solanaAccount (input['tokenMintBase']),
-                this.solanaAccount (input['tokenMintQuote']),
-                this.solanaAccount (input['tokenProgramBase']),
-                this.solanaAccount (input['tokenProgramQuote']),
-            ],
-            'data': this.solanaBytesHex ([ 58, 0, 0, 0, 0, 0, 0, 0 ]) + this.solanaU64leHex (input['orderId']),
+            'accounts': accounts,
+            'data': data,
         };
     }
 
-    fibePerpPlaceOrderIx (input) {
-        const isCrossMargin = input['isCrossMargin'] ? 1 : 0;
-        let data = this.solanaBytesHex ([ 135, 0, 0, 0, 0, 0, 0, 0 ]);
-        data += this.solanaU64leHex (input['priceInTicks']);
-        data += this.solanaU64leHex (input['orderId']);
+    fibePerpPlaceOrderIx (input: Dict): Dict {
+        const isCrossMargin = this.safeBool (input, 'isCrossMargin', false) ? 1 : 0;
+        const reduceOnly = this.safeBool (input, 'reduceOnly', false) ? 1 : 0;
+        let data = this.solanaBytesHex ([ 176, 0, 0, 0, 0, 0, 0, 0 ]);
+        data += this.solanaU8Hex (input['subAccountIndex']);
+        data += this.solanaU32leHex (input['priceInTicks']);
+        data += this.solanaOptionU64Hex (input['clientOrderId']);
         data += this.solanaU8Hex (this.fibeSideIndex (input['side']));
+        data += this.solanaU64leHex (input['sizeInBase']);
+        data += this.solanaU8Hex (this.fibeTimeInForceIndex (input['timeInForce']));
+        data += this.solanaU8Hex (reduceOnly);
         data += this.solanaU8Hex (isCrossMargin);
         data += this.solanaOptionU8Hex (input['initialLeverage']);
-        data += this.solanaOptionU64Hex (input['sizeInBase']);
-        data += this.solanaOptionU64Hex (undefined);
-        data += this.solanaU8Hex (this.fibeTimeInForceIndex (input['timeInForce']));
         data += this.solanaOptionU16Hex (undefined);
+        data += this.solanaU64leHex (0);
+        data += this.solanaU8Hex (input['matchingCount']);
+        const referrerInfo = this.safeString (input, 'referrerInfo', this.fibeProgramId ());
+        const referralFeeAccount = this.safeString (input, 'referralFeeAccount');
+        const referralFeeAccountAddress = (referralFeeAccount === undefined) ? this.fibeProgramId () : referralFeeAccount;
         const accounts = [
+            this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (this.solanaSystemProgramId ()),
             this.solanaAccount (this.fibeGetDexConfigPda ()),
-            this.solanaAccount (input['ownerOrDelegate'], true, true),
-            this.solanaAccount (input['market'], true),
-            this.solanaAccount (input['perpControlParams']),
-            this.solanaAccount (input['hfmmMarginAccounts'], true),
-            this.solanaAccount (input['hfmmRegistry'], true),
-            this.solanaAccount (input['ownerSubAccountState'], true),
+            this.solanaAccount (this.fibeGetPerpDexConfigPda ()),
+            this.solanaAccount (input['owner'], true, true),
+            this.solanaAccount (input['owner'], false, true),
             this.solanaAccount (input['ownerState'], true),
             this.solanaAccount (input['ownerMarginAccount'], true),
-            this.solanaAccount (input['openOrdersPerMarket'], true),
+            this.solanaAccount (input['orderSlots'], true),
+            this.solanaAccount (input['market'], true),
+            this.solanaAccount (input['perpControlParams']),
+            this.solanaAccount (input['marginTables']),
+            this.solanaAccount (input['hfmmMarginAccounts']),
+            this.solanaAccount (input['hfmmRegistry'], true),
             this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (this.fibeProgramId ()),
+            this.solanaAccount (this.fibeProgramId ()),
+            this.solanaAccount (this.fibeProgramId ()),
+            this.solanaAccount (referrerInfo),
+            this.solanaAccount (referralFeeAccountAddress, referralFeeAccount !== undefined),
             this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (this.fibeProgramId ()),
             this.solanaAccount (this.fibeProgramId ()),
         ];
-        const tickArrays = this.safeList (input, 'tickArrays', [ input['tickArray'] ]);
+        const tickArrays = this.safeList (input, 'tickArrays', []);
         for (let i = 0; i < tickArrays.length; i++) {
             accounts.push (this.solanaAccount (tickArrays[i], true));
         }
@@ -2883,24 +2875,37 @@ export default class fibe extends Exchange {
         };
     }
 
-    fibePerpCloseRestingOrderIx (input) {
+    fibePerpCloseRestingOrderIx (input: Dict): Dict {
+        let data = this.solanaBytesHex ([ 177, 0, 0, 0, 0, 0, 0, 0 ]);
+        data += this.solanaU8Hex (input['subAccountIndex']);
+        data += this.fibeOrderReferenceHex (input['orderId'], input['isClientOrderId']);
+        data += this.solanaU8Hex (0); // no tick-event location hint
+        const accounts = [
+            this.solanaAccount (this.fibeProgramId ()),
+            this.solanaAccount (this.solanaSystemProgramId ()),
+            this.solanaAccount (input['owner'], true, true),
+            this.solanaAccount (this.fibeGetDexConfigPda ()),
+            this.solanaAccount (this.fibeGetPerpDexConfigPda ()),
+            this.solanaAccount (input['owner'], false, true),
+            this.solanaAccount (input['ownerState'], true),
+            this.solanaAccount (input['ownerMarginAccount'], true),
+            this.solanaAccount (input['orderSlots'], true),
+            this.solanaAccount (input['market'], true),
+            this.solanaAccount (input['perpControlParams']),
+            this.solanaAccount (input['marginTables']),
+        ];
+        const tickArrays = this.safeList (input, 'tickArrays', []);
+        for (let i = 0; i < tickArrays.length; i++) {
+            accounts.push (this.solanaAccount (tickArrays[i], true));
+        }
         return {
             'programId': this.fibeProgramId (),
-            'accounts': [
-                this.solanaAccount (input['ownerOrDelegate'], true, true),
-                this.solanaAccount (input['market'], true),
-                this.solanaAccount (input['perpControlParams']),
-                this.solanaAccount (input['ownerSubAccountState'], true),
-                this.solanaAccount (input['ownerState'], true),
-                this.solanaAccount (input['ownerMarginAccount'], true),
-                this.solanaAccount (input['openOrdersPerMarket'], true),
-                this.solanaAccount (input['tickArray'], true),
-            ],
-            'data': this.solanaBytesHex ([ 136, 0, 0, 0, 0, 0, 0, 0 ]) + this.solanaU64leHex (input['orderId']) + this.solanaU8Hex (0),
+            'accounts': accounts,
+            'data': data,
         };
     }
 
-    solanaFindAccountIndex (accounts, pubkey) {
+    solanaFindAccountIndex (accounts: Dict[], pubkey: any): number {
         for (let i = 0; i < accounts.length; i++) {
             if (this.safeString (accounts[i], 'pubkey') === pubkey) {
                 return i;
@@ -2909,7 +2914,7 @@ export default class fibe extends Exchange {
         return -1;
     }
 
-    solanaAddAccountMeta (accounts, meta) {
+    solanaAddAccountMeta (accounts: Dict[], meta: Dict): Dict[] {
         const pubkey = this.safeString (meta, 'pubkey');
         const index = this.solanaFindAccountIndex (accounts, pubkey);
         if (index < 0) {
@@ -2927,8 +2932,8 @@ export default class fibe extends Exchange {
         return accounts;
     }
 
-    solanaCompileMessageHex (payer, blockhash, instructions) {
-        let metas = [];
+    solanaCompileMessageHex (payer: any, blockhash: any, instructions: Dict[]): string {
+        let metas: Dict[] = [];
         metas = this.solanaAddAccountMeta (metas, this.solanaAccount (payer, true, true));
         for (let i = 0; i < instructions.length; i++) {
             const ix = instructions[i];
@@ -2954,25 +2959,25 @@ export default class fibe extends Exchange {
         ordered.push (metas[payerIndex]);
         for (let i = 0; i < sortedMetas.length; i++) {
             const meta = sortedMetas[i];
-            if (this.safeBool (meta, 'isSigner') && this.safeBool (meta, 'isWritable')) {
+            if (this.safeBool (meta, 'isSigner', false) && this.safeBool (meta, 'isWritable', false)) {
                 ordered.push (meta);
             }
         }
         for (let i = 0; i < sortedMetas.length; i++) {
             const meta = sortedMetas[i];
-            if (this.safeBool (meta, 'isSigner') && !this.safeBool (meta, 'isWritable')) {
+            if (this.safeBool (meta, 'isSigner', false) && !this.safeBool (meta, 'isWritable', false)) {
                 ordered.push (meta);
             }
         }
         for (let i = 0; i < sortedMetas.length; i++) {
             const meta = sortedMetas[i];
-            if (!this.safeBool (meta, 'isSigner') && this.safeBool (meta, 'isWritable')) {
+            if (!this.safeBool (meta, 'isSigner', false) && this.safeBool (meta, 'isWritable', false)) {
                 ordered.push (meta);
             }
         }
         for (let i = 0; i < sortedMetas.length; i++) {
             const meta = sortedMetas[i];
-            if (!this.safeBool (meta, 'isSigner') && !this.safeBool (meta, 'isWritable')) {
+            if (!this.safeBool (meta, 'isSigner', false) && !this.safeBool (meta, 'isWritable', false)) {
                 ordered.push (meta);
             }
         }
@@ -2981,12 +2986,12 @@ export default class fibe extends Exchange {
         let readonlyUnsigned = 0;
         for (let i = 0; i < ordered.length; i++) {
             const meta = ordered[i];
-            if (this.safeBool (meta, 'isSigner')) {
+            if (this.safeBool (meta, 'isSigner', false)) {
                 requiredSignatures += 1;
-                if (!this.safeBool (meta, 'isWritable')) {
+                if (!this.safeBool (meta, 'isWritable', false)) {
                     readonlySigners += 1;
                 }
-            } else if (!this.safeBool (meta, 'isWritable')) {
+            } else if (!this.safeBool (meta, 'isWritable', false)) {
                 readonlyUnsigned += 1;
             }
         }
@@ -3027,7 +3032,7 @@ export default class fibe extends Exchange {
         return messageHex;
     }
 
-    solanaSignTransaction (payer, privateKeyHex, blockhash, instructions) {
+    solanaSignTransaction (payer: any, privateKeyHex: any, blockhash: any, instructions: Dict[]): Dict {
         const messageHex = this.solanaCompileMessageHex (payer, blockhash, instructions);
         const messageBytes = this.base16ToBinary (messageHex);
         const privateKeyBytes = this.base16ToBinary (privateKeyHex);
@@ -3041,81 +3046,81 @@ export default class fibe extends Exchange {
         };
     }
 
-    fibeReadOpenOrderPriceInTicks (data, mt, orderId) {
-        const discriminator = (mt === 'S') ? 35 : 68;
-        const hex = this.fibeAssertAccountDiscriminator (data, discriminator, 'open orders');
-        const orderCount = parseInt (this.solanaReadU32FromHex (hex, 36));
-        const orderSize = (mt === 'S') ? 104 : 120;
-        let offset = 40;
-        for (let i = 0; i < orderCount; i++) {
-            const clientOrderId = this.solanaReadU64FromHex (hex, offset);
-            if ((clientOrderId !== '0') && (clientOrderId === orderId)) {
-                return this.solanaReadU64FromHex (hex, offset + 16);
-            }
-            offset = this.sum (offset, orderSize);
-        }
-        throw new ExchangeError (this.id + ' cancelOrder() could not find open order ' + orderId);
-    }
-
-    async fibeLocalTxCreateOrder (params): Promise<Dict> {
+    async fibeLocalTxCreateOrder (params: Dict): Promise<Dict> {
         const market = this.fibeTxParseMarket (params['market']);
-        const mt = this.safeString (market, 'mt');
-        if ((mt === 'S') && (market['quoteMint'] === this.solanaNativeMint ()) && (this.safeString (params, 'side') === 'B')) {
-            throw new ExchangeError (this.id + ' local Fibe transaction construction does not support buying with native SOL quote');
-        }
-        const mi = this.safeString (market, 'mi');
+        const mt = market['mt'];
+        const mi = market['mi'];
         let marginMode = this.safeString (params, 'marginMode', 'cross');
         if (mt === 'P') {
             marginMode = this.fibeNormalizeMarginMode ('createOrder', marginMode);
         }
         const owner = this.safeString (params, 'user');
         const privateKeyHex = this.solanaParsePrivateKeyHex (this.safeString (params, 'privateKey'), owner);
-        const orderId = this.safeString (params, 'orderId');
+        const clientOrderId = this.safeString (params, 'orderId');
         const subAccountIndex = this.safeInteger (params, 'subAccountIndex', 0);
         const orderSubAccountIndex = (mt === 'S') ? 0 : subAccountIndex;
         const priceInTicks = this.fibePriceToTicks (this.safeString (params, 'price'), this.safeInteger (market, 'quoteDecimals'), this.safeString (market, 'tickSizeInQuoteBaseUnits'), this.safeString (params, 'side'), this.safeNumber (params, 'slippage'));
-        if (!Precise.stringGt (priceInTicks, '0')) {
-            throw new InvalidOrder (this.id + ' createOrder() price is too small for market tick size');
+        if (!Precise.stringGt (priceInTicks, '0') || !Precise.stringLt (priceInTicks, this.numberToString (this.fibeMaxTick ()))) {
+            throw new InvalidOrder (this.id + ' createOrder() price must map to a tick between 1 and ' + this.numberToString (this.fibeMaxTick () - 1));
         }
         const sizeInBase = this.fibeNormalizeQuantity (
             this.fibeDecimalToUnits (this.safeString (params, 'amount'), this.safeInteger (market, 'baseDecimals')),
             this.safeString (market, 'lotSizeInBaseBaseUnits')
         );
-        const orderTickArray = this.fibeGetTickArrayPda (mt, mi, priceInTicks);
         const rpcUrl = this.safeString (params, 'rpcUrl');
         const commitment = this.safeString (params, 'commitment', 'confirmed');
-        const accountId = await this.fibeGetOrNextAccountId (rpcUrl, owner, orderSubAccountIndex, commitment);
-        const openOrdersPerMarket = this.fibeGetOpenOrdersPerMarketPda (mt, accountId, mi);
-        const tickArrays = await this.fibeGetTickArraysForOrder (rpcUrl, market, priceInTicks, sizeInBase, this.safeString (params, 'side'), commitment);
-        let ixs = [];
+        const account = await this.fibeGetOrNextAccountId (owner, orderSubAccountIndex, mt === 'S');
+        const accountId = this.safeString (account, 'accountId');
+        const createSubAccount = this.safeBool (account, 'createSubAccount', false);
+        const orderSlots = this.fibeGetOrderSlotsPda (mt, accountId, mi);
+        const tickArrayResult = await this.fibeGetCreateOrderTickArrays (market, owner, orderSubAccountIndex, priceInTicks, sizeInBase, this.safeString (params, 'side'), this.safeString (params, 'timeInForce'));
+        const tickArrays = this.safeList (tickArrayResult, 'tickArrays', []);
+        const matchingCount = this.safeInteger (tickArrayResult, 'matchingCount');
+        let ixs: Dict[] = [];
+        if (createSubAccount) {
+            ixs.push (this.fibeCreateSubAccountIx (owner, orderSubAccountIndex));
+        }
         if (mt === 'S') {
             const tokenProgramQuote = await this.solanaGetTokenProgram (rpcUrl, this.safeString (market, 'quoteMint'), this.safeString (market, 'tokenProgramQuote'), commitment);
             const tokenProgramBase = await this.solanaGetTokenProgram (rpcUrl, this.safeString (market, 'baseMint'), this.safeString (market, 'tokenProgramBase'), commitment);
             const ownerBaseTokenAccount = this.solanaGetAssociatedTokenAddress (this.safeString (market, 'baseMint'), owner, tokenProgramBase);
             const ownerQuoteTokenAccount = this.solanaGetAssociatedTokenAddress (this.safeString (market, 'quoteMint'), owner, tokenProgramQuote);
-            if ((this.safeString (market, 'baseMint') === this.solanaNativeMint ()) && (this.safeString (params, 'side') === 'A')) {
-                const wrapIxs = await this.solanaWrapNativeIfNeeded (rpcUrl, owner, tokenProgramBase, sizeInBase, commitment);
+            const side = this.safeString (params, 'side');
+            let inputMint = this.safeString (market, 'baseMint');
+            let inputTokenProgram = tokenProgramBase;
+            if (side === 'B') {
+                inputMint = this.safeString (market, 'quoteMint');
+                inputTokenProgram = tokenProgramQuote;
+            }
+            const inputAmount = this.fibeSpotInputAmount (market, sizeInBase, priceInTicks, side);
+            if (inputMint === this.solanaNativeMint ()) {
+                const wrapIxs = await this.solanaWrapNativeIfNeeded (rpcUrl, owner, inputTokenProgram, inputAmount, commitment);
                 ixs = this.arrayConcat (ixs, wrapIxs);
+            } else {
+                const inputAtaIx = await this.solanaCreateAssociatedTokenAccountIfNeeded (rpcUrl, owner, owner, inputMint, inputTokenProgram, commitment);
+                if (inputAtaIx !== undefined) {
+                    ixs.push (inputAtaIx);
+                }
             }
-            let ataMint = this.safeString (market, 'quoteMint');
-            let ataTokenProgram = tokenProgramQuote;
-            if (this.safeString (params, 'side') === 'B') {
-                ataMint = this.safeString (market, 'baseMint');
-                ataTokenProgram = tokenProgramBase;
+            let outputMint = this.safeString (market, 'quoteMint');
+            let outputTokenProgram = tokenProgramQuote;
+            if (side === 'B') {
+                outputMint = this.safeString (market, 'baseMint');
+                outputTokenProgram = tokenProgramBase;
             }
-            const createAtaIx = await this.solanaCreateAssociatedTokenAccountIfNeeded (rpcUrl, owner, owner, ataMint, ataTokenProgram, commitment);
-            if (createAtaIx !== undefined) {
-                ixs.push (createAtaIx);
+            const outputAtaIx = await this.solanaCreateAssociatedTokenAccountIfNeeded (rpcUrl, owner, owner, outputMint, outputTokenProgram, commitment);
+            if (outputAtaIx !== undefined) {
+                ixs.push (outputAtaIx);
             }
-            const initUserIx = await this.fibeInitUserIfNeeded (rpcUrl, owner, 0, commitment);
-            if (initUserIx !== undefined) {
-                ixs.push (initUserIx);
+            const referralAccounts = await this.fibeGetReferralAccounts (owner, market, tokenProgramQuote, rpcUrl, commitment);
+            const createReferralFeeAccountIx = this.safeDict (referralAccounts, 'createFeeAccountIx');
+            if (createReferralFeeAccountIx !== undefined) {
+                ixs.push (createReferralFeeAccountIx);
             }
             ixs.push (this.fibeSpotPlaceOrderIx ({
                 'owner': owner,
-                'ownerSubAccountState': this.fibeGetSubAccountStatePda (owner, 0),
                 'ownerState': this.fibeGetUserStatePda (owner),
-                'openOrdersPerMarket': openOrdersPerMarket,
+                'orderSlots': orderSlots,
                 'ownerBaseTokenAccount': ownerBaseTokenAccount,
                 'ownerQuoteTokenAccount': ownerQuoteTokenAccount,
                 'market': this.safeString (market, 'marketPubkey'),
@@ -3126,75 +3131,85 @@ export default class fibe extends Exchange {
                 'tokenMintQuote': this.safeString (market, 'quoteMint'),
                 'tokenProgramBase': tokenProgramBase,
                 'tokenProgramQuote': tokenProgramQuote,
+                'referrerInfo': this.safeString (referralAccounts, 'referrerInfo'),
+                'referralFeeAccount': this.safeString (referralAccounts, 'referralFeeAccount'),
                 'priceInTicks': priceInTicks,
-                'orderId': orderId,
+                'clientOrderId': clientOrderId,
                 'side': this.safeString (params, 'side'),
                 'sizeInBase': sizeInBase,
                 'timeInForce': this.safeString (params, 'timeInForce'),
-                'tickArray': orderTickArray,
+                'matchingCount': matchingCount,
+                'subAccountIndex': orderSubAccountIndex,
                 'tickArrays': tickArrays,
             }));
         } else {
             const isCrossMargin = (marginMode === 'cross');
-            const quoteTokenIndex = this.safeString (market, 'quoteTokenIndex');
+            const quoteTokenIndex = this.safeInteger (market, 'quoteTokenIndex');
+            let referralAccounts: Dict = {};
+            if (subAccountIndex === 0) {
+                referralAccounts = await this.fibeGetReferralAccounts (owner, market);
+            }
             ixs.push (this.fibePerpPlaceOrderIx ({
-                'ownerOrDelegate': owner,
-                'ownerSubAccountState': this.fibeGetSubAccountStatePda (owner, subAccountIndex),
+                'owner': owner,
                 'ownerState': this.fibeGetUserStatePda (owner),
-                'ownerMarginAccount': this.fibeGetUserMarginAccountPda (accountId, quoteTokenIndex),
-                'openOrdersPerMarket': openOrdersPerMarket,
+                'ownerMarginAccount': this.fibeGetUserMarginAccountPda (owner, subAccountIndex, quoteTokenIndex),
+                'orderSlots': orderSlots,
                 'market': this.safeString (market, 'marketPubkey'),
                 'perpControlParams': this.fibeGetPerpControlParamsPda (quoteTokenIndex),
+                'marginTables': this.fibeGetMarginTableRegistryPda (quoteTokenIndex),
                 'hfmmMarginAccounts': this.fibeGetHfmmMarginAccountsPda (quoteTokenIndex),
                 'hfmmRegistry': this.fibeGetHfmmRegistryPda ('P', mi),
+                'referrerInfo': this.safeString (referralAccounts, 'referrerInfo'),
+                'referralFeeAccount': this.safeString (referralAccounts, 'referralFeeAccount'),
                 'priceInTicks': priceInTicks,
-                'orderId': orderId,
+                'clientOrderId': clientOrderId,
                 'side': this.safeString (params, 'side'),
                 'isCrossMargin': isCrossMargin,
                 'initialLeverage': this.safeInteger (params, 'initialLeverage'),
+                'reduceOnly': false,
                 'sizeInBase': sizeInBase,
                 'timeInForce': this.safeString (params, 'timeInForce'),
-                'tickArray': orderTickArray,
+                'matchingCount': matchingCount,
+                'subAccountIndex': subAccountIndex,
                 'tickArrays': tickArrays,
             }));
         }
         const result = await this.solanaSignAndSend (rpcUrl, owner, privateKeyHex, ixs, params);
         result['accountId'] = accountId;
-        result['openOrdersPerMarket'] = openOrdersPerMarket;
+        result['orderSlots'] = orderSlots;
         result['priceInTicks'] = priceInTicks;
-        result['tickArray'] = orderTickArray;
         result['tickArrays'] = tickArrays;
+        result['matchingCount'] = matchingCount;
         return result;
     }
 
-    async fibeLocalTxCancelOrder (params): Promise<Dict> {
+    async fibeLocalTxCancelOrder (params: Dict): Promise<Dict> {
         const market = this.fibeTxParseMarket (params['market']);
-        const mt = this.safeString (market, 'mt');
-        const mi = this.safeString (market, 'mi');
+        const mt = market['mt'];
+        const mi = market['mi'];
         const owner = this.safeString (params, 'user');
         const privateKeyHex = this.solanaParsePrivateKeyHex (this.safeString (params, 'privateKey'), owner);
         const orderId = this.safeString (params, 'orderId');
+        const isClientOrderId = this.safeBool (params, 'isClientOrderId', false);
         let subAccountIndex = this.safeInteger (params, 'subAccountIndex', 0);
         if (mt === 'S') {
             subAccountIndex = 0;
         }
         const rpcUrl = this.safeString (params, 'rpcUrl');
         const commitment = this.safeString (params, 'commitment', 'confirmed');
-        const accountId = await this.fibeGetOrNextAccountId (rpcUrl, owner, subAccountIndex, commitment, false);
-        const openOrdersPerMarket = this.fibeGetOpenOrdersPerMarketPda (mt, accountId, mi);
-        const openOrdersAccount = await this.solanaGetAccountData (rpcUrl, openOrdersPerMarket, commitment);
-        const priceInTicks = this.fibeReadOpenOrderPriceInTicks (openOrdersAccount, mt, orderId);
-        const tickArray = this.fibeGetTickArrayPda (mt, mi, priceInTicks);
-        let ix = undefined;
+        const account = await this.fibeGetOrNextAccountId (owner, subAccountIndex, false);
+        const accountId = this.safeString (account, 'accountId');
+        const orderSlots = this.fibeGetOrderSlotsPda (mt, accountId, mi);
+        const tickArrayResult = await this.fibeGetCancelOrderTickArrays (market, owner, subAccountIndex, orderId, isClientOrderId);
+        const tickArrays = this.safeList (tickArrayResult, 'tickArrays', []);
+        let ix: any = undefined;
         if (mt === 'S') {
             const tokenProgramBase = await this.solanaGetTokenProgram (rpcUrl, this.safeString (market, 'baseMint'), this.safeString (market, 'tokenProgramBase'), commitment);
             const tokenProgramQuote = await this.solanaGetTokenProgram (rpcUrl, this.safeString (market, 'quoteMint'), this.safeString (market, 'tokenProgramQuote'), commitment);
             ix = this.fibeSpotCloseRestingOrderIx ({
                 'owner': owner,
-                'ownerSubAccountState': this.fibeGetSubAccountStatePda (owner, 0),
                 'ownerState': this.fibeGetUserStatePda (owner),
-                'openOrdersPerMarket': openOrdersPerMarket,
-                'tickArray': tickArray,
+                'orderSlots': orderSlots,
                 'ownerBaseTokenAccount': this.solanaGetAssociatedTokenAddress (this.safeString (market, 'baseMint'), owner, tokenProgramBase),
                 'ownerQuoteTokenAccount': this.solanaGetAssociatedTokenAddress (this.safeString (market, 'quoteMint'), owner, tokenProgramQuote),
                 'market': this.safeString (market, 'marketPubkey'),
@@ -3205,33 +3220,37 @@ export default class fibe extends Exchange {
                 'tokenProgramBase': tokenProgramBase,
                 'tokenProgramQuote': tokenProgramQuote,
                 'orderId': orderId,
+                'isClientOrderId': isClientOrderId,
+                'subAccountIndex': subAccountIndex,
+                'tickArrays': tickArrays,
             });
         } else {
-            const quoteTokenIndex = this.safeString (market, 'quoteTokenIndex');
+            const quoteTokenIndex = this.safeInteger (market, 'quoteTokenIndex');
             ix = this.fibePerpCloseRestingOrderIx ({
                 'market': this.safeString (market, 'marketPubkey'),
-                'ownerSubAccountState': this.fibeGetSubAccountStatePda (owner, subAccountIndex),
-                'ownerOrDelegate': owner,
+                'owner': owner,
                 'ownerState': this.fibeGetUserStatePda (owner),
-                'ownerMarginAccount': this.fibeGetUserMarginAccountPda (accountId, quoteTokenIndex),
-                'openOrdersPerMarket': openOrdersPerMarket,
+                'ownerMarginAccount': this.fibeGetUserMarginAccountPda (owner, subAccountIndex, quoteTokenIndex),
+                'orderSlots': orderSlots,
                 'perpControlParams': this.fibeGetPerpControlParamsPda (quoteTokenIndex),
-                'tickArray': tickArray,
+                'marginTables': this.fibeGetMarginTableRegistryPda (quoteTokenIndex),
                 'orderId': orderId,
+                'isClientOrderId': isClientOrderId,
+                'subAccountIndex': subAccountIndex,
+                'tickArrays': tickArrays,
             });
         }
         const result = await this.solanaSignAndSend (rpcUrl, owner, privateKeyHex, [ ix ], params);
         result['accountId'] = accountId;
-        result['openOrdersPerMarket'] = openOrdersPerMarket;
-        result['priceInTicks'] = priceInTicks;
-        result['tickArray'] = tickArray;
+        result['orderSlots'] = orderSlots;
+        result['tickArrays'] = tickArrays;
         return result;
     }
 
-    fibeTxParseMarket (market) {
+    fibeTxParseMarket (market: Market): Dict {
         const info = this.safeDict (market, 'info', {});
         let mt = 'P';
-        if (this.safeBool (market, 'spot')) {
+        if (this.safeBool (market, 'spot', false)) {
             mt = 'S';
         }
         return {
@@ -3250,15 +3269,12 @@ export default class fibe extends Exchange {
         };
     }
 
-    async solanaGetTokenProgram (rpcUrl, mint, tokenProgram = undefined, commitment = 'confirmed'): Promise<string> {
+    async solanaGetTokenProgram (rpcUrl: any, mint: any, tokenProgram: any = undefined, commitment = 'confirmed'): Promise<string> {
         if (tokenProgram !== undefined) {
             return tokenProgram;
         }
-        let tokenPrograms = this.safeDict (this.options, 'tokenPrograms');
-        if (tokenPrograms === undefined) {
-            this.options['tokenPrograms'] = {};
-            tokenPrograms = this.safeDict (this.options, 'tokenPrograms');
-        }
+        const tokenPrograms: Dict = this.safeDict (this.options, 'tokenPrograms', {});
+        this.options['tokenPrograms'] = tokenPrograms;
         const cached = this.safeString (tokenPrograms, mint);
         if (cached !== undefined) {
             return cached;
@@ -3272,15 +3288,7 @@ export default class fibe extends Exchange {
         return owner;
     }
 
-    async solanaGetAccountData (rpcUrl, pubkey, commitment = 'confirmed') {
-        const accountInfo = await this.solanaGetAccountInfo (rpcUrl, pubkey, commitment);
-        if (accountInfo === undefined) {
-            throw new ExchangeError (this.id + ' account not found ' + pubkey);
-        }
-        return accountInfo['data'];
-    }
-
-    async solanaGetAccountInfo (rpcUrl, pubkey, commitment = 'confirmed'): Promise<Dict> {
+    async solanaGetAccountInfo (rpcUrl: any, pubkey: any, commitment = 'confirmed'): Promise<any> {
         const response = await this.solanaRpc (rpcUrl, 'getAccountInfo', [
             pubkey,
             { 'encoding': 'base64', 'commitment': commitment },
@@ -3290,7 +3298,9 @@ export default class fibe extends Exchange {
             return undefined;
         }
         const data = this.safeList (value, 'data', []);
-        if (data.length === 0) {
+        // Store the length so PHP transpiles this list check to count().
+        const dataLength = data.length;
+        if (dataLength === 0) {
             throw new ExchangeError (this.id + ' Solana account response is missing base64 data for ' + pubkey);
         }
         return {
@@ -3299,7 +3309,7 @@ export default class fibe extends Exchange {
         };
     }
 
-    async solanaSignAndSend (rpcUrl, payer, privateKeyHex, instructions, params = {}): Promise<Dict> {
+    async solanaSignAndSend (rpcUrl: any, payer: any, privateKeyHex: any, instructions: Dict[], params: Dict = {}): Promise<Dict> {
         const commitment = this.safeString (params, 'commitment', 'confirmed');
         let blockhash = this.safeString (params, 'blockhash');
         let lastValidBlockHeight = undefined;
@@ -3352,8 +3362,9 @@ export default class fibe extends Exchange {
         };
     }
 
-    async solanaRpc (rpcUrl, method, params): Promise<Dict> {
-        const response = await this.fetch (rpcUrl, 'POST', { 'Content-Type': 'application/json' }, this.json ({
+    async solanaRpc (rpcUrl: any, method: string, params: any[]): Promise<any> {
+        const url = rpcUrl.toString ();
+        const response = await this.fetch (url, 'POST', { 'Content-Type': 'application/json' }, this.json ({
             'jsonrpc': '2.0',
             'id': 1,
             'method': method,
