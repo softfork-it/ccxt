@@ -477,7 +477,7 @@ export default class fibe extends fibeRest {
                 account['total'] = this.safeString (marginSummary, 'accountValue');
                 const quoteTokenIndex = this.safeInteger (entry, 'qti');
                 let code = undefined;
-                const marketValues = Object.values (this.markets);
+                const marketValues = this.toArray (this.markets);
                 for (let j = 0; j < marketValues.length; j++) {
                     const market = marketValues[j];
                     if ((market['swap'] === true) && (this.safeInteger (market['info'], 'qti') === quoteTokenIndex)) {
