@@ -24,6 +24,7 @@ export default class fibe extends Exchange {
             'name': 'Fibe',
             'countries': [ ],
             'certified': false,
+            'pro': true,
             // The API budget is 1200 weighted units/minute; standard endpoints cost 7 units.
             'rateLimit': 500,
             'version': 'v1',

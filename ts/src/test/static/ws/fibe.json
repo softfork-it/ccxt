@@ -1,0 +1,599 @@
+{
+    "exchange": "fibe",
+    "skipKeys": [],
+    "options": {},
+    "methods": {
+        "watchOrderBook": [
+            {
+                "description": "routes the normalized default mantissa returned by the order book stream",
+                "input": [
+                    "SOL/USDC",
+                    5,
+                    {
+                        "nSigFigs": 5
+                    }
+                ],
+                "url": "wss://api.devnet.fibe.trade/v1",
+                "messages": [
+                    {
+                        "channel": "l2Book",
+                        "data": {
+                            "mi": "1",
+                            "mt": "S",
+                            "nSigFigs": 5,
+                            "mantissa": 1,
+                            "bids": [
+                                {
+                                    "px": "100",
+                                    "sz": "1.5"
+                                }
+                            ],
+                            "asks": [
+                                {
+                                    "px": "101",
+                                    "sz": "2"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "sentMessages": [
+                    {
+                        "method": "subscribe",
+                        "subscription": {
+                            "type": "l2Book",
+                            "mi": "1",
+                            "mt": "S",
+                            "nSigFigs": 5
+                        }
+                    }
+                ],
+                "parsedResponse": {
+                    "bids": [
+                        [
+                            100,
+                            1.5
+                        ]
+                    ],
+                    "asks": [
+                        [
+                            101,
+                            2
+                        ]
+                    ],
+                    "timestamp": null,
+                    "datetime": null,
+                    "nonce": null,
+                    "symbol": "SOL/USDC"
+                }
+            }
+        ],
+        "watchTrades": [
+            {
+                "description": "uses the trade snapshot as the baseline",
+                "input": [
+                    "SOL/USDC"
+                ],
+                "url": "wss://api.devnet.fibe.trade/v1",
+                "messages": [
+                    {
+                        "channel": "subscriptionResponse",
+                        "data": {
+                            "type": "trades",
+                            "mi": "1",
+                            "mt": "S"
+                        }
+                    },
+                    {
+                        "channel": "trades",
+                        "data": [
+                            {
+                                "mi": "1",
+                                "mt": "S",
+                                "px": "100",
+                                "side": "B",
+                                "sz": "0.2",
+                                "oid": "200",
+                                "time": 1783763617,
+                                "txId": "3WF7T6Hmyrpdo1MMUghDnv1LaVwmKuEM1duJ3VaU5fCUhSfudqtu4JCP3kCTnjqDUqBb1hcTtk5cNF4BYkCQv2mH"
+                            },
+                            {
+                                "mi": "1",
+                                "mt": "S",
+                                "px": "99",
+                                "side": "B",
+                                "sz": "0.1",
+                                "oid": "199",
+                                "time": 1783763616,
+                                "txId": "4XDCQqbJEcfSWvFSWfKLtWkRYbBPqC2LAAoVQhDscLtPwGVdxkuMSKtj32eGxntqwVZbin6i26ecF8kZDFhnaL4y"
+                            }
+                        ]
+                    },
+                    {
+                        "channel": "trades",
+                        "data": [
+                            {
+                                "mi": "1",
+                                "mt": "S",
+                                "px": "100",
+                                "side": "B",
+                                "sz": "0.2",
+                                "oid": "200",
+                                "time": 1783763617,
+                                "txId": "3WF7T6Hmyrpdo1MMUghDnv1LaVwmKuEM1duJ3VaU5fCUhSfudqtu4JCP3kCTnjqDUqBb1hcTtk5cNF4BYkCQv2mH"
+                            }
+                        ],
+                        "isSnapshot": true
+                    },
+                    {
+                        "channel": "trades",
+                        "data": [
+                            {
+                                "mi": "1",
+                                "mt": "S",
+                                "px": "101",
+                                "side": "A",
+                                "sz": "0.3",
+                                "oid": "201",
+                                "time": 1783763618,
+                                "txId": "5QMwMadnHXfxKrwRYCpgjnR1fU4C6ZrHmmhPmt8g37jLtZ4jtKVM4Lo4oRv8Mnhu39eSn57F2hyqxTKf6f66LHZU"
+                            }
+                        ]
+                    }
+                ],
+                "sentMessages": [
+                    {
+                        "method": "subscribe",
+                        "subscription": {
+                            "type": "trades",
+                            "mi": "1",
+                            "mt": "S"
+                        }
+                    }
+                ],
+                "parsedResponses": [
+                    [
+                        {
+                            "info": {
+                                "mi": "1",
+                                "mt": "S",
+                                "px": "100",
+                                "side": "B",
+                                "sz": "0.2",
+                                "oid": "200",
+                                "time": 1783763617,
+                                "txId": "3WF7T6Hmyrpdo1MMUghDnv1LaVwmKuEM1duJ3VaU5fCUhSfudqtu4JCP3kCTnjqDUqBb1hcTtk5cNF4BYkCQv2mH"
+                            },
+                            "id": null,
+                            "timestamp": 1783763617000,
+                            "datetime": "2026-07-11T09:53:37.000Z",
+                            "symbol": "SOL/USDC",
+                            "order": "200",
+                            "type": null,
+                            "side": "buy",
+                            "takerOrMaker": null,
+                            "price": 100,
+                            "amount": 0.2,
+                            "cost": 20,
+                            "fee": {
+                                "cost": null,
+                                "currency": null
+                            },
+                            "fees": []
+                        }
+                    ],
+                    [
+                        {
+                            "info": {
+                                "mi": "1",
+                                "mt": "S",
+                                "px": "101",
+                                "side": "A",
+                                "sz": "0.3",
+                                "oid": "201",
+                                "time": 1783763618,
+                                "txId": "5QMwMadnHXfxKrwRYCpgjnR1fU4C6ZrHmmhPmt8g37jLtZ4jtKVM4Lo4oRv8Mnhu39eSn57F2hyqxTKf6f66LHZU"
+                            },
+                            "id": null,
+                            "timestamp": 1783763618000,
+                            "datetime": "2026-07-11T09:53:38.000Z",
+                            "symbol": "SOL/USDC",
+                            "order": "201",
+                            "type": null,
+                            "side": "sell",
+                            "takerOrMaker": null,
+                            "price": 101,
+                            "amount": 0.3,
+                            "cost": 30.3,
+                            "fee": {
+                                "cost": null,
+                                "currency": null
+                            },
+                            "fees": []
+                        }
+                    ]
+                ]
+            }
+        ],
+        "watchOrders": [
+            {
+                "description": "routes order updates by account id",
+                "input": [
+                    "SOL/USDC",
+                    null,
+                    null,
+                    {
+                        "accountId": "42"
+                    }
+                ],
+                "url": "wss://api.devnet.fibe.trade/v1",
+                "messages": [
+                    {
+                        "channel": "orderUpdates",
+                        "data": {
+                            "aid": "42",
+                            "orders": [
+                                {
+                                    "mi": "1",
+                                    "mt": "S",
+                                    "oid": "42",
+                                    "cloid": "4200",
+                                    "orderType": "Limit",
+                                    "timeInForce": "ALO",
+                                    "reduceOnly": false,
+                                    "limitPx": "80",
+                                    "priceInTicks": 8000,
+                                    "side": "B",
+                                    "origSz": "0.5",
+                                    "sz": "0.2",
+                                    "isTrigger": false,
+                                    "isPositionTpsl": false,
+                                    "status": "O",
+                                    "txId": "order-tx",
+                                    "createdAt": 1783763617,
+                                    "updatedAt": 1783763618
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "sentMessages": [
+                    {
+                        "method": "subscribe",
+                        "subscription": {
+                            "type": "orderUpdates",
+                            "aid": "42"
+                        }
+                    }
+                ],
+                "parsedResponse": [
+                    {
+                        "info": {
+                            "mi": "1",
+                            "mt": "S",
+                            "oid": "42",
+                            "cloid": "4200",
+                            "orderType": "Limit",
+                            "timeInForce": "ALO",
+                            "reduceOnly": false,
+                            "limitPx": "80",
+                            "priceInTicks": 8000,
+                            "side": "B",
+                            "origSz": "0.5",
+                            "sz": "0.2",
+                            "isTrigger": false,
+                            "isPositionTpsl": false,
+                            "status": "O",
+                            "txId": "order-tx",
+                            "createdAt": 1783763617,
+                            "updatedAt": 1783763618
+                        },
+                        "id": "42",
+                        "clientOrderId": "4200",
+                        "timestamp": 1783763617000,
+                        "datetime": "2026-07-11T09:53:37.000Z",
+                        "lastTradeTimestamp": null,
+                        "lastUpdateTimestamp": 1783763618000,
+                        "symbol": "SOL/USDC",
+                        "type": "limit",
+                        "timeInForce": "PO",
+                        "postOnly": true,
+                        "reduceOnly": false,
+                        "side": "buy",
+                        "price": 80,
+                        "triggerPrice": null,
+                        "amount": 0.5,
+                        "cost": 24,
+                        "average": null,
+                        "filled": 0.3,
+                        "remaining": 0.2,
+                        "status": "open",
+                        "fee": null,
+                        "trades": [],
+                        "fees": [],
+                        "stopPrice": null,
+                        "takeProfitPrice": null,
+                        "stopLossPrice": null
+                    }
+                ]
+            }
+        ],
+        "watchMyTrades": [
+            {
+                "description": "uses the fill snapshot as the baseline",
+                "input": [
+                    "SOL/USDC",
+                    null,
+                    null,
+                    {
+                        "accountId": "42"
+                    }
+                ],
+                "url": "wss://api.devnet.fibe.trade/v1",
+                "messages": [
+                    {
+                        "channel": "userFills",
+                        "data": {
+                            "aid": "42",
+                            "fills": [
+                                {
+                                    "mi": "1",
+                                    "mt": "S",
+                                    "px": "80",
+                                    "side": "B",
+                                    "sz": "0.25",
+                                    "type": "Limit",
+                                    "tradeValue": "20",
+                                    "oid": "100",
+                                    "cloid": "101",
+                                    "time": 1783763617,
+                                    "txId": "trade-tx-a",
+                                    "slot": 17,
+                                    "takerOrMaker": "maker",
+                                    "feeAmount": "0.01",
+                                    "feeToken": "quote",
+                                    "closedPnl": null,
+                                    "startPosition": "0",
+                                    "dir": "Open Long",
+                                    "crossed": false
+                                },
+                                {
+                                    "mi": "1",
+                                    "mt": "S",
+                                    "px": "79",
+                                    "side": "B",
+                                    "sz": "0.1",
+                                    "type": "Limit",
+                                    "tradeValue": "7.9",
+                                    "oid": "98",
+                                    "cloid": "99",
+                                    "time": 1783763616,
+                                    "txId": "trade-tx-c",
+                                    "slot": 16,
+                                    "takerOrMaker": "maker",
+                                    "feeAmount": "0.005",
+                                    "feeToken": "quote",
+                                    "closedPnl": null,
+                                    "startPosition": "0",
+                                    "dir": "Open Long",
+                                    "crossed": false
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "channel": "userFills",
+                        "data": {
+                            "aid": "42",
+                            "isSnapshot": true,
+                            "fills": [
+                                {
+                                    "mi": "1",
+                                    "mt": "S",
+                                    "px": "80",
+                                    "side": "B",
+                                    "sz": "0.25",
+                                    "type": "Limit",
+                                    "tradeValue": "20",
+                                    "oid": "100",
+                                    "cloid": "101",
+                                    "time": 1783763617,
+                                    "txId": "trade-tx-a",
+                                    "slot": 17,
+                                    "takerOrMaker": "maker",
+                                    "feeAmount": "0.01",
+                                    "feeToken": "quote",
+                                    "closedPnl": null,
+                                    "startPosition": "0",
+                                    "dir": "Open Long",
+                                    "crossed": false
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "channel": "userFills",
+                        "data": {
+                            "aid": "42",
+                            "fills": [
+                                {
+                                    "mi": "1",
+                                    "mt": "S",
+                                    "px": "81",
+                                    "side": "A",
+                                    "sz": "0.1",
+                                    "type": "Limit",
+                                    "tradeValue": "8.1",
+                                    "oid": "102",
+                                    "cloid": "103",
+                                    "time": 1783763618,
+                                    "txId": "trade-tx-b",
+                                    "slot": 18,
+                                    "takerOrMaker": "taker",
+                                    "feeAmount": "0.02",
+                                    "feeToken": "quote",
+                                    "closedPnl": null,
+                                    "startPosition": "0",
+                                    "dir": "Open Short",
+                                    "crossed": false
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "sentMessages": [
+                    {
+                        "method": "subscribe",
+                        "subscription": {
+                            "type": "userFills",
+                            "aid": "42"
+                        }
+                    }
+                ],
+                "parsedResponses": [
+                    [
+                        {
+                            "info": {
+                                "mi": "1",
+                                "mt": "S",
+                                "px": "80",
+                                "side": "B",
+                                "sz": "0.25",
+                                "type": "Limit",
+                                "tradeValue": "20",
+                                "oid": "100",
+                                "cloid": "101",
+                                "time": 1783763617,
+                                "txId": "trade-tx-a",
+                                "slot": 17,
+                                "takerOrMaker": "maker",
+                                "feeAmount": "0.01",
+                                "feeToken": "quote",
+                                "closedPnl": null,
+                                "startPosition": "0",
+                                "dir": "Open Long",
+                                "crossed": false
+                            },
+                            "id": null,
+                            "timestamp": 1783763617000,
+                            "datetime": "2026-07-11T09:53:37.000Z",
+                            "symbol": "SOL/USDC",
+                            "order": "100",
+                            "type": "limit",
+                            "side": "buy",
+                            "takerOrMaker": "maker",
+                            "price": 80,
+                            "amount": 0.25,
+                            "cost": 20,
+                            "fee": {
+                                "currency": "USDC",
+                                "cost": 0.01
+                            },
+                            "fees": [
+                                {
+                                    "currency": "USDC",
+                                    "cost": 0.01
+                                }
+                            ]
+                        }
+                    ],
+                    [
+                        {
+                            "info": {
+                                "mi": "1",
+                                "mt": "S",
+                                "px": "81",
+                                "side": "A",
+                                "sz": "0.1",
+                                "type": "Limit",
+                                "tradeValue": "8.1",
+                                "oid": "102",
+                                "cloid": "103",
+                                "time": 1783763618,
+                                "txId": "trade-tx-b",
+                                "slot": 18,
+                                "takerOrMaker": "taker",
+                                "feeAmount": "0.02",
+                                "feeToken": "quote",
+                                "closedPnl": null,
+                                "startPosition": "0",
+                                "dir": "Open Short",
+                                "crossed": false
+                            },
+                            "id": null,
+                            "timestamp": 1783763618000,
+                            "datetime": "2026-07-11T09:53:38.000Z",
+                            "symbol": "SOL/USDC",
+                            "order": "102",
+                            "type": "limit",
+                            "side": "sell",
+                            "takerOrMaker": "taker",
+                            "price": 81,
+                            "amount": 0.1,
+                            "cost": 8.1,
+                            "fee": {
+                                "currency": "USDC",
+                                "cost": 0.02
+                            },
+                            "fees": [
+                                {
+                                    "currency": "USDC",
+                                    "cost": 0.02
+                                }
+                            ]
+                        }
+                    ]
+                ]
+            }
+        ],
+        "watchOHLCV": [
+            {
+                "description": "parses a candle update",
+                "input": [
+                    "SOL/USDC",
+                    "1m"
+                ],
+                "url": "wss://api.devnet.fibe.trade/v1",
+                "messages": [
+                    {
+                        "channel": "candle",
+                        "data": {
+                            "mi": "1",
+                            "mt": "S",
+                            "t": 1783763580,
+                            "T": 1783763639,
+                            "o": "100",
+                            "c": "101",
+                            "l": "99",
+                            "h": "102",
+                            "bv": "1.5",
+                            "qv": "151",
+                            "n": 4
+                        }
+                    }
+                ],
+                "sentMessages": [
+                    {
+                        "method": "subscribe",
+                        "subscription": {
+                            "type": "candle",
+                            "mi": "1",
+                            "mt": "S",
+                            "interval": "1m"
+                        }
+                    }
+                ],
+                "parsedResponse": [
+                    [
+                        1783763580000,
+                        100,
+                        102,
+                        99,
+                        101,
+                        1.5
+                    ]
+                ]
+            }
+        ]
+    }
+}

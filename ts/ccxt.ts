@@ -191,6 +191,7 @@ import deribitPro from  './src/pro/deribit.js'
 import derivePro from  './src/pro/derive.js'
 import dydxPro from  './src/pro/dydx.js'
 import extendedPro from  './src/pro/extended.js'
+import fibePro from  './src/pro/fibe.js'
 import gatePro from  './src/pro/gate.js'
 import gateeuPro from  './src/pro/gateeu.js'
 import geminiPro from  './src/pro/gemini.js'
@@ -387,6 +388,7 @@ const pro = {
     'derive':                 derivePro,
     'dydx':                   dydxPro,
     'extended':               extendedPro,
+    'fibe':                   fibePro,
     'gate':                   gatePro,
     'gateeu':                 gateeuPro,
     'gemini':                 geminiPro,
